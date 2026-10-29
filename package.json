@@ -8,8 +8,9 @@
   "scripts": {
     "build": "openlearn-plugin-sdk build",
     "dev": "openlearn-plugin-sdk build --watch",
+    "test:contract": "node test-harness/static-check.mjs .",
     "pack": "node scripts/pack.mjs",
-    "release": "npm run build && npm run pack"
+    "release": "npm run test:contract && npm run build && npm run pack"
   },
   "dependencies": {
     "@openlearn/plugin-sdk": "^3.7.4"

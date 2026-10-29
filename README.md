@@ -32,6 +32,8 @@ OpenLearnV2 第三方插件：**学生完成当前关卡的任务后才能进入
 ```
 level-quest/
 ├── manifest.json          # 插件清单（teacher.tab 视图 + 16 条 api 路由）
+├── plugin.contract.json   # 设计契约（L0 校验 UI 通道/槽位/视图）
+├── test-harness/          # L0 静态检查（零依赖，npm run test:contract）
 ├── src/
 │   ├── index.ts           # 服务端：路由、SQL、上传分片、生命周期
 │   └── frontend.tsx       # 隐藏沙箱前端：轮询 /state 决定学生入口显隐
@@ -45,8 +47,10 @@ level-quest/
 
 ```bash
 npm install
-npm run build      # openlearn-plugin-sdk build -> dist/ 与官方 ZIP
-npm run pack       # 追加 storage/*，产出 level-quest.zip
+npm run test:contract   # L0 契约静态检查（<1s，零依赖）
+npm run build           # openlearn-plugin-sdk build -> dist/ 与官方 ZIP
+npm run pack            # 追加 storage/*，产出 level-quest.zip
+npm run release         # 以上三步一次跑完（发布请统一走这条）
 ```
 
 上传**根目录的 `level-quest.zip`**（不是 SDK 直接产出的那个 ZIP：它只含
@@ -59,6 +63,25 @@ npm run pack       # 追加 storage/*，产出 level-quest.zip
 3. 学生进入课堂，完成当前关卡后自动解锁下一关
 4. 「实时看板」查看进度，必要时「放行 / 重置」
 5. 课末「结束闯关」
+
+## 质量校验（L0）
+
+`test-harness/` 是 vendored 的零依赖静态检查，发布前必跑：
+
+```bash
+npm run test:contract
+```
+
+覆盖：manifest 必填项与权限串 · **隔离模式空能力门禁（`CAP_EMPTY_ISOLATED`）** ·
+`api.routes ↔ ctx.http` 双向配对 · 槽位真伪 · `view` 文件存在与桥接引用 · 裸导入 ·
+process 模式禁用 API · DB 表名/分号 · 密钥泄漏。
+
+- 设计契约在 `plugin.contract.json`（process + sandbox-view + 教师/学生槽位），
+  改 UI 通道时同步更新，否则 L0 会报 `UI_MODE_MISMATCH` / `STUDENT_ENTRY_MISSING`。
+- `MANIFEST_MODE_IGNORED` 是预期提示：`manifest.executionMode` 不参与运行判定，
+  实际模式由服务端按白名单计算；保留该字段只为让安装记录不显示「被强制改写」。
+- 平台升级后槽位有变化时，从插件开发 skill 重抄 `test-harness/slot-registry.json`
+  （`platformVersion` 字段可核对）。
 
 ## 数据与安全
 
