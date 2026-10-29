@@ -359,8 +359,15 @@ function api(fn: Handler) {
 
 function registerRoutes(ctx: PluginContext): void {
   // 教师：读取整套关卡与运行状态
+  //
+  // 注意：不要用 `/config`。平台把 `config / toggle / contributions / ...`
+  // 视为保留动作（plugin-api-gateway RESERVED_ACTIONS，且核心路由
+  // `GET /api/plugins/:id/config` 先于网关注册）。插件若占用该路径，
+  // 请求会被平台 `requireAuth('teacher')` 的配置接口截走：登录态失效时
+  // 页面会直接显示平台原文 “Session expired or invalid”，即使登录正常
+  // 也只会拿到平台的 configuration schema，永远读不到插件自己的数据。
   ctx.http.get(
-    '/config',
+    '/overview',
     api(async (req) => {
       requireStaff(req);
       const lessonId = requireLesson(q(req, 'lessonId'));

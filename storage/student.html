@@ -266,7 +266,28 @@
         'use strict';
 
         var bridge = window.OpenLearnPluginBridge;
-        var api = bridge.api;
+        var rawApi = bridge.api;
+        // 平台鉴权失败时返回英文原文，改写成学生能理解的中文指引。
+        function authHint(err) {
+          var msg = (err && err.message) || '';
+          if (/Session expired or invalid|Authentication required/i.test(msg)) {
+            return '登录状态已失效：请刷新本页；若仍提示，请退出后重新登录。';
+          }
+          if (/Role .* not allowed/i.test(msg)) {
+            return '当前账号无权参与课堂闯关。';
+          }
+          return msg;
+        }
+        function guarded(promise) {
+          return promise.catch(function (err) {
+            throw new Error(authHint(err) || '请求失败，请稍后重试');
+          });
+        }
+        var api = {
+          get: function (path) { return guarded(rawApi.get(path)); },
+          post: function (path, body) { return guarded(rawApi.post(path, body)); },
+          del: function (path) { return guarded(rawApi.del(path)); },
+        };
         var LESSON = '';
         var state = null;
         var sig = '';

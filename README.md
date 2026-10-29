@@ -47,11 +47,14 @@ level-quest/
 
 ```bash
 npm install
-npm run test:contract   # L0 契约静态检查（<1s，零依赖）
 npm run build           # openlearn-plugin-sdk build -> dist/ 与官方 ZIP
+npm run test:contract   # L0 契约静态检查（<1s，零依赖；优先扫描 dist/index.js）
 npm run pack            # 追加 storage/*，产出 level-quest.zip
 npm run release         # 以上三步一次跑完（发布请统一走这条）
 ```
+
+> L0 在 `dist/index.js` 存在时会检查构建产物而不是 `src/`，所以顺序必须是
+> **先 build 再 test:contract**；否则会拿旧产物误报/漏报。
 
 上传**根目录的 `level-quest.zip`**（不是 SDK 直接产出的那个 ZIP：它只含
 `index.js / manifest.json / frontend.js`，缺少 `storage/`，装上后教师页与学生面板都会空白）。
@@ -74,8 +77,14 @@ npm run test:contract
 
 覆盖：manifest 必填项与权限串 · **隔离模式空能力门禁（`CAP_EMPTY_ISOLATED`）** ·
 `api.routes ↔ ctx.http` 双向配对 · 槽位真伪 · `view` 文件存在与桥接引用 · 裸导入 ·
-process 模式禁用 API · DB 表名/分号 · 密钥泄漏。
+process 模式禁用 API · DB 表名/分号 · 密钥泄漏；另外由
+`scripts/check-reserved-routes.mjs` 检查**平台保留路由**（`config / toggle /
+contributions / check-update / network-grants / sandbox-command …`）。
 
+- 平台保留动作不能拿来当插件自己的 API 路径：网关会放行，但核心路由先匹配。
+  例如插件写 `GET /config` 会被平台的插件配置接口截走 —— 登录态失效时页面直接
+  显示平台原文 `Session expired or invalid`，登录正常时也只会拿到平台的配置
+  schema。本插件因此把该接口命名为 `/overview`。
 - 设计契约在 `plugin.contract.json`（process + sandbox-view + 教师/学生槽位），
   改 UI 通道时同步更新，否则 L0 会报 `UI_MODE_MISMATCH` / `STUDENT_ENTRY_MISSING`。
 - `MANIFEST_MODE_IGNORED` 是预期提示：`manifest.executionMode` 不参与运行判定，

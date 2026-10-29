@@ -1,7 +1,7 @@
 {
   "id": "@openlearn-community/level-quest",
   "name": "课堂闯关",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "main": "index.js",
   "icon": "Swords",
   "executionMode": "process",
@@ -24,7 +24,7 @@
   },
   "api": {
     "routes": [
-      { "method": "GET", "path": "/config", "roles": ["teacher"], "rateLimit": { "windowMs": 60000, "max": 3000 } },
+      { "method": "GET", "path": "/overview", "roles": ["teacher"], "rateLimit": { "windowMs": 60000, "max": 3000 } },
       { "method": "POST", "path": "/levels", "roles": ["teacher"], "rateLimit": { "windowMs": 60000, "max": 1200 } },
       { "method": "POST", "path": "/start", "roles": ["teacher"], "rateLimit": { "windowMs": 60000, "max": 600 } },
       { "method": "POST", "path": "/end", "roles": ["teacher"], "rateLimit": { "windowMs": 60000, "max": 600 } },

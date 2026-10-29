@@ -495,7 +495,29 @@
         'use strict';
 
         var bridge = window.OpenLearnPluginBridge;
-        var api = bridge.api;
+        var rawApi = bridge.api;
+        // 平台鉴权失败时返回的是英文原文（Session expired or invalid /
+        // Authentication required），对使用者没有可操作性，统一改写成中文指引。
+        function authHint(err) {
+          var msg = (err && err.message) || '';
+          if (/Session expired or invalid|Authentication required/i.test(msg)) {
+            return '登录状态已失效：请刷新本页；若仍提示，请退出后重新登录，再从侧边栏打开「课堂闯关」。';
+          }
+          if (/Role .* not allowed/i.test(msg)) {
+            return '当前账号没有教师权限，无法使用课堂闯关。';
+          }
+          return msg;
+        }
+        function guarded(promise) {
+          return promise.catch(function (err) {
+            throw new Error(authHint(err) || '请求失败，请稍后重试');
+          });
+        }
+        var api = {
+          get: function (path) { return guarded(rawApi.get(path)); },
+          post: function (path, body) { return guarded(rawApi.post(path, body)); },
+          del: function (path) { return guarded(rawApi.del(path)); },
+        };
         var LESSON = '';
         var CLASS = '';
         var tab = 'design';
@@ -608,7 +630,7 @@
 
         // ── 数据加载 ──────────────────────────────────────────────────────
         async function loadConfig() {
-          var data = await api.get('config?lessonId=' + encodeURIComponent(LESSON));
+          var data = await api.get('overview?lessonId=' + encodeURIComponent(LESSON));
           cfg = data;
           levels = (data.levels || []).map(hydrate);
           dirty = false;
@@ -616,7 +638,7 @@
         }
 
         async function refreshMeta() {
-          var data = await api.get('config?lessonId=' + encodeURIComponent(LESSON));
+          var data = await api.get('overview?lessonId=' + encodeURIComponent(LESSON));
           cfg = Object.assign({}, cfg || {}, {
             status: data.status,
             participantCount: data.participantCount,
