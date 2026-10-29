@@ -1,0 +1,45 @@
+{
+  "id": "@openlearn-community/level-quest",
+  "name": "课堂闯关",
+  "version": "0.1.1",
+  "main": "index.js",
+  "icon": "Swords",
+  "executionMode": "process",
+  "description": "学生逐关完成课堂任务后才能解锁下一关：支持选择题/判断题/文本题自动判定、手动完成与作业提交，教师端提供实时看板与放行/重置。",
+  "author": "OpenLearn Community",
+  "engines": {
+    "openlearn": ">=0.7.6"
+  },
+  "capabilitiesProposed": ["lesson:read", "lesson:write"],
+  "contributes": {
+    "teacher.tab": [
+      {
+        "id": "lvq-tab",
+        "label": "课堂闯关",
+        "icon": "Swords",
+        "position": 46,
+        "view": "storage/teacher.html"
+      }
+    ]
+  },
+  "api": {
+    "routes": [
+      { "method": "GET", "path": "/config", "roles": ["teacher"], "rateLimit": { "windowMs": 60000, "max": 3000 } },
+      { "method": "POST", "path": "/levels", "roles": ["teacher"], "rateLimit": { "windowMs": 60000, "max": 1200 } },
+      { "method": "POST", "path": "/start", "roles": ["teacher"], "rateLimit": { "windowMs": 60000, "max": 600 } },
+      { "method": "POST", "path": "/end", "roles": ["teacher"], "rateLimit": { "windowMs": 60000, "max": 600 } },
+      { "method": "GET", "path": "/dashboard", "roles": ["teacher"], "rateLimit": { "windowMs": 60000, "max": 12000 } },
+      { "method": "GET", "path": "/attempts", "roles": ["teacher"], "rateLimit": { "windowMs": 60000, "max": 6000 } },
+      { "method": "POST", "path": "/release", "roles": ["teacher"], "rateLimit": { "windowMs": 60000, "max": 6000 } },
+      { "method": "POST", "path": "/reset", "roles": ["teacher"], "rateLimit": { "windowMs": 60000, "max": 3000 } },
+      { "method": "GET", "path": "/state", "roles": ["teacher", "student"], "rateLimit": { "windowMs": 60000, "max": 20000 } },
+      { "method": "POST", "path": "/answer", "roles": ["student"], "rateLimit": { "windowMs": 60000, "max": 6000 } },
+      { "method": "POST", "path": "/self-report", "roles": ["student"], "rateLimit": { "windowMs": 60000, "max": 3000 } },
+      { "method": "POST", "path": "/submission", "roles": ["student"], "rateLimit": { "windowMs": 60000, "max": 3000 } },
+      { "method": "POST", "path": "/upload/init", "roles": ["student"], "rateLimit": { "windowMs": 60000, "max": 3000 } },
+      { "method": "POST", "path": "/upload/chunk", "roles": ["student"], "rateLimit": { "windowMs": 60000, "max": 20000 } },
+      { "method": "POST", "path": "/upload/finish", "roles": ["student"], "rateLimit": { "windowMs": 60000, "max": 3000 } },
+      { "method": "GET", "path": "/file/:id", "roles": ["teacher", "student"], "rateLimit": { "windowMs": 60000, "max": 3000 } }
+    ]
+  }
+}

@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>课堂闯关</title>
+    <script src="/plugin-sandbox/view-bridge.js"></script>
+    <style>
+      :root {
+        --bg: #f8fafc;
+        --card: #ffffff;
+        --text: #0f172a;
+        --muted: #64748b;
+        --line: #e2e8f0;
+        --brand: #4f46e5;
+        --brand-weak: #eef2ff;
+        --ok: #059669;
+        --ok-weak: #ecfdf5;
+        --bad: #dc2626;
+        --bad-weak: #fef2f2;
+        --warn: #b45309;
+        --warn-weak: #fffbeb;
+      }
+      [data-theme='dark'] {
+        --bg: #0b1220;
+        --card: #111c33;
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --line: #24314a;
+        --brand: #818cf8;
+        --brand-weak: #1e1b4b;
+        --ok: #34d399;
+        --ok-weak: #052e26;
+        --bad: #f87171;
+        --bad-weak: #3b1213;
+        --warn: #fbbf24;
+        --warn-weak: #3a2a08;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      }
+      body {
+        padding: 12px;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 16px;
+      }
+      .stack {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .kicker {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        color: var(--brand);
+      }
+      h1 {
+        font-size: 17px;
+        margin: 2px 0 0;
+      }
+      h2 {
+        font-size: 15px;
+        margin: 0;
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 12.5px;
+      }
+      .prompt {
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: var(--text);
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 1px 8px;
+        border-radius: 999px;
+        background: var(--brand-weak);
+        color: var(--brand);
+        font-size: 11.5px;
+        font-weight: 600;
+      }
+      .rail {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 28px;
+        height: 24px;
+        padding: 0 8px;
+        border-radius: 999px;
+        font-size: 11.5px;
+        font-weight: 600;
+        border: 1px solid var(--line);
+        color: var(--muted);
+        background: transparent;
+        white-space: nowrap;
+      }
+      .chip.done {
+        border-color: transparent;
+        background: var(--ok-weak);
+        color: var(--ok);
+      }
+      .chip.current {
+        border-color: transparent;
+        background: var(--brand);
+        color: #fff;
+      }
+      .chip.released {
+        outline: 1px dashed var(--ok);
+        outline-offset: 1px;
+      }
+      .options {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .option {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        cursor: pointer;
+        background: var(--card);
+      }
+      .option:hover {
+        border-color: var(--brand);
+      }
+      .option input {
+        margin-top: 3px;
+        accent-color: var(--brand);
+      }
+      .option .key {
+        flex: none;
+        width: 20px;
+        height: 20px;
+        border-radius: 6px;
+        background: var(--brand-weak);
+        color: var(--brand);
+        font-size: 11px;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      textarea,
+      input[type='text'] {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font: inherit;
+        color: var(--text);
+        background: var(--bg);
+        resize: vertical;
+      }
+      textarea:focus,
+      input[type='text']:focus,
+      select:focus {
+        outline: 2px solid var(--brand-weak);
+        border-color: var(--brand);
+      }
+      button {
+        border: none;
+        border-radius: 10px;
+        padding: 9px 16px;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+        background: var(--brand);
+        color: #fff;
+      }
+      button.ghost {
+        background: transparent;
+        border: 1px solid var(--line);
+        color: var(--text);
+      }
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      .banner {
+        border-radius: 10px;
+        padding: 9px 12px;
+        font-size: 13px;
+      }
+      .banner.success {
+        background: var(--ok-weak);
+        color: var(--ok);
+      }
+      .banner.error {
+        background: var(--bad-weak);
+        color: var(--bad);
+      }
+      .banner.info {
+        background: var(--brand-weak);
+        color: var(--brand);
+      }
+      .banner.warn {
+        background: var(--warn-weak);
+        color: var(--warn);
+      }
+      .file-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .file-btn {
+        display: inline-flex;
+        align-items: center;
+        padding: 8px 14px;
+        border: 1px dashed var(--line);
+        border-radius: 10px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--brand);
+        cursor: pointer;
+        background: transparent;
+      }
+      .empty {
+        text-align: center;
+        padding: 28px 16px;
+        color: var(--muted);
+      }
+      .center {
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"><div class="card empty">正在载入闯关信息…</div></div>
+
+    <script>
+      (function () {
+        'use strict';
+
+        var bridge = window.OpenLearnPluginBridge;
+        var api = bridge.api;
+        var LESSON = '';
+        var state = null;
+        var sig = '';
+        var feedback = null;
+        var pickedFile = null;
+        var busy = false;
+        var timer = null;
+        var MAX_FILE = 1572864;
+        var CHUNK_B64 = 524288;
+
+        function el(id) {
+          return document.getElementById(id);
+        }
+        function esc(v) {
+          return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+          });
+        }
+        function letter(i) {
+          return String.fromCharCode(65 + i);
+        }
+        function currentLevel() {
+          if (!state || !state.levels) return null;
+          for (var i = 0; i < state.levels.length; i++) {
+            if (state.levels[i].id === state.currentLevelId) return state.levels[i];
+          }
+          return null;
+        }
+        function typeLabel(t) {
+          return t === 'quiz' ? '答题' : t === 'manual' ? '手动完成' : '作业提交';
+        }
+        function resize() {
+          requestAnimationFrame(function () {
+            var h = Math.min(880, Math.max(140, el('app').offsetHeight + 8));
+            bridge.ui.resize(h);
+          });
+        }
+        function setFeedback(f) {
+          feedback = f;
+          var n = el('feedback');
+          if (n) {
+            n.innerHTML = f ? '<div class="banner ' + esc(f.tone) + '">' + esc(f.text) + '</div>' : '';
+            resize();
+          }
+        }
+        function bannerHtml() {
+          return (
+            '<div id="feedback">' +
+            (feedback ? '<div class="banner ' + esc(feedback.tone) + '">' + esc(feedback.text) + '</div>' : '') +
+            '</div>'
+          );
+        }
+        function lockUi(on) {
+          busy = on;
+          var btn = document.querySelector('[data-act="submit"]');
+          if (btn) btn.disabled = on;
+          var label = el('btn-label');
+          if (label) label.textContent = on ? '提交中…' : '提交答案';
+        }
+
+        function signature() {
+          if (!state) return 'none';
+          return [
+            state.status,
+            state.levelsCount,
+            state.completedCount,
+            state.currentLevelId,
+            (state.released || []).length,
+            state.error || '',
+          ].join('|');
+        }
+
+        function render() {
+          var next = signature();
+          if (next === sig && el('app').dataset.rendered === '1') return;
+          sig = next;
+          el('app').innerHTML = view();
+          el('app').dataset.rendered = '1';
+          if (feedback && feedback.levelId && feedback.levelId !== (state && state.currentLevelId)) {
+            feedback = null;
+            var n = el('feedback');
+            if (n) n.innerHTML = '';
+          }
+          if (pickedFile && feedback && feedback.levelId && feedback.levelId !== (state && state.currentLevelId)) {
+            pickedFile = null;
+          }
+          resize();
+        }
+
+        function progressHtml() {
+          if (!state || !state.levels || state.levels.length === 0) return '';
+          var done = {};
+          (state.completed || []).forEach(function (id) {
+            done[id] = true;
+          });
+          var rel = {};
+          (state.released || []).forEach(function (id) {
+            rel[id] = true;
+          });
+          var chips = state.levels
+            .map(function (l) {
+              var cls = done[l.id] ? 'done' : l.id === state.currentLevelId ? 'current' : 'locked';
+              if (done[l.id] && rel[l.id]) cls += ' released';
+              return '<span class="chip ' + cls + '" title="' + esc(l.title) + '">' + esc(l.seq) + '</span>';
+            })
+            .join('');
+          return (
+            '<div class="row" style="justify-content:space-between">' +
+            '<div class="rail">' +
+            chips +
+            '</div>' +
+            '<span class="muted">已完成 ' +
+            esc(state.completedCount || 0) +
+            ' / ' +
+            esc(state.levelsCount || 0) +
+            '</span>' +
+            '</div>'
+          );
+        }
+
+        function optionsHtml(level) {
+          var multi = level.questionType === 'multiple';
+          var showKey = level.questionType !== 'judge';
+          var items = (level.options || [])
+            .map(function (text, i) {
+              return (
+                '<label class="option">' +
+                '<input type="' +
+                (multi ? 'checkbox' : 'radio') +
+                '" name="q" value="' +
+                i +
+                '" />' +
+                (showKey ? '<span class="key">' + letter(i) + '</span>' : '') +
+                '<span>' +
+                esc(text) +
+                '</span>' +
+                '</label>'
+              );
+            })
+            .join('');
+          return '<ul class="options">' + items + '</ul>';
+        }
+
+        function levelCard(level) {
+          var body = '';
+          if (level.type === 'quiz') {
+            if (level.questionType === 'text') {
+              body =
+                '<textarea id="q-text" rows="2" placeholder="请输入答案"></textarea>' +
+                '<div class="muted">换行与空格不计入比对，大小写不敏感。</div>';
+            } else {
+              body = optionsHtml(level) + (level.questionType === 'multiple' ? '<div class="muted">可多选。</div>' : '');
+            }
+          } else if (level.type === 'manual') {
+            body = '<div class="banner info">按老师的要求完成本环节任务后，点击下方按钮进入下一关。</div>';
+          } else {
+            body =
+              '<textarea id="s-text" rows="3" placeholder="写下你的完成说明（可选）"></textarea>' +
+              '<div class="file-row">' +
+              '<label class="file-btn" for="file-input">选择文件（≤1.5MB）</label>' +
+              '<input id="file-input" type="file" style="display:none" />' +
+              '<span class="muted" id="file-name">' +
+              (pickedFile ? esc(pickedFile.name) + ' · ' + Math.ceil(pickedFile.size / 1024) + 'KB' : '未选择文件') +
+              '</span>' +
+              '</div>' +
+              '<div class="muted" id="upline"></div>' +
+              (level.needFile ? '<div class="banner warn">本关必须上传文件。</div>' : '');
+          }
+
+          return (
+            '<div class="card stack">' +
+            '<div>' +
+            '<div class="kicker">第 ' +
+            esc(level.seq) +
+            ' 关 · ' +
+            esc(typeLabel(level.type)) +
+            '</div>' +
+            '<h1>' +
+            esc(level.title) +
+            '</h1>' +
+            (level.prompt ? '<div class="prompt" style="margin-top:6px">' + esc(level.prompt) + '</div>' : '') +
+            '</div>' +
+            body +
+            bannerHtml() +
+            '<div class="row" style="justify-content:flex-end;margin-top:2px">' +
+            '<button data-act="submit" type="button"><span id="btn-label">' +
+            (level.type === 'manual' ? '我已完成本关' : '提交答案') +
+            '</span></button>' +
+            '</div>' +
+            '</div>'
+          );
+        }
+
+        function view() {
+          if (!LESSON) return '<div class="card empty">请先在课程页选择一个课堂。</div>';
+          if (!state) return '<div class="card empty">正在载入闯关信息…</div>';
+          if (state.status === 'error') {
+            return '<div class="card empty">' + esc(state.error || '加载失败') + '</div>';
+          }
+          if (state.status === 'idle') {
+            return (
+              '<div class="card center stack">' +
+              '<div class="kicker">课堂闯关</div>' +
+              '<h1>等待老师开始本次闯关</h1>' +
+              '<div class="muted">' +
+              (state.levelsCount ? '本课堂已配置 ' + esc(state.levelsCount) + ' 关，开始后按顺序解锁。' : '老师尚未配置关卡。') +
+              '</div>' +
+              '</div>'
+            );
+          }
+          if (state.status === 'ended') {
+            return (
+              '<div class="card stack">' +
+              '<div class="center">' +
+              '<div class="kicker">课堂闯关</div>' +
+              '<h1>本次闯关已结束</h1>' +
+              '<div class="muted">你完成了 ' +
+              esc(state.completedCount || 0) +
+              ' / ' +
+              esc(state.levelsCount || 0) +
+              ' 关</div>' +
+              '</div>' +
+              progressHtml() +
+              '</div>'
+            );
+          }
+
+          var head =
+            '<div class="card stack" style="padding:12px 14px">' +
+            '<div class="row" style="justify-content:space-between">' +
+            '<div class="kicker">课堂闯关 · 进行中</div>' +
+            '<span class="badge">按顺序解锁</span>' +
+            '</div>' +
+            progressHtml() +
+            '</div>';
+
+          if (!state.currentLevelId) {
+            return (
+              head +
+              '<div class="card center stack" style="margin-top:12px">' +
+              '<h1>全部关卡已完成</h1>' +
+              '<div class="muted">等待老师结束本次闯关。</div>' +
+              '</div>'
+            );
+          }
+
+          var level = currentLevel();
+          if (!level) return head;
+          return head + '<div style="margin-top:12px">' + levelCard(level) + '</div>';
+        }
+
+        async function fetchState() {
+          if (!LESSON) {
+            state = null;
+            render();
+            return;
+          }
+          try {
+            state = await api.get('state?lessonId=' + encodeURIComponent(LESSON));
+          } catch (err) {
+            if (!state) state = { status: 'error', error: (err && err.message) || '加载失败' };
+          }
+          render();
+        }
+
+        function readBase64(file) {
+          return new Promise(function (resolve, reject) {
+            var reader = new FileReader();
+            reader.onerror = function () {
+              reject(new Error('读取文件失败'));
+            };
+            reader.onload = function () {
+              var s = String(reader.result || '');
+              var i = s.indexOf(',');
+              resolve(i >= 0 ? s.slice(i + 1) : s);
+            };
+            reader.readAsDataURL(file);
+          });
+        }
+
+        function setUploadLine(text) {
+          var n = el('upline');
+          if (n) n.textContent = text || '';
+          resize();
+        }
+
+        async function uploadFile(level) {
+          var init = await api.post('upload/init', {
+            lessonId: LESSON,
+            levelId: level.id,
+            name: pickedFile.name,
+            mime: pickedFile.mime,
+            size: pickedFile.size,
+          });
+          var b64 = pickedFile.b64;
+          var chunks = [];
+          for (var i = 0; i < b64.length; i += CHUNK_B64) chunks.push(b64.slice(i, i + CHUNK_B64));
+          for (var j = 0; j < chunks.length; j++) {
+            setUploadLine('正在上传 ' + (j + 1) + ' / ' + chunks.length);
+            await api.post('upload/chunk', { uploadId: init.uploadId, data: chunks[j] });
+          }
+          setUploadLine('正在保存附件…');
+          var fin = await api.post('upload/finish', { uploadId: init.uploadId });
+          setUploadLine('');
+          return fin.fileId;
+        }
+
+        async function submitCurrent(level) {
+          if (busy) return;
+          setFeedback(null);
+          lockUi(true);
+          try {
+            if (level.type === 'manual') {
+              var r1 = await api.post('self-report', { lessonId: LESSON, levelId: level.id });
+              if (r1 && r1.completed) setFeedback({ tone: 'success', text: '已记录完成，正在解锁下一关', levelId: level.id });
+            } else if (level.type === 'quiz') {
+              var payload = { lessonId: LESSON, levelId: level.id };
+              if (level.questionType === 'multiple') {
+                var checked = Array.prototype.slice.call(document.querySelectorAll('input[name="q"]:checked'));
+                if (!checked.length) throw new Error('请至少选择一项');
+                payload.choices = checked.map(function (x) {
+                  return Number(x.value);
+                });
+              } else if (level.questionType === 'text') {
+                var box = el('q-text');
+                var text = box ? box.value : '';
+                if (!text.trim()) throw new Error('请填写答案');
+                payload.text = text;
+              } else {
+                var picked = document.querySelector('input[name="q"]:checked');
+                if (!picked) throw new Error('请选择一个选项');
+                payload.choice = Number(picked.value);
+              }
+              var r2 = await api.post('answer', payload);
+              if (r2 && r2.correct) {
+                setFeedback({ tone: 'success', text: '回答正确，正在解锁下一关', levelId: level.id });
+              } else {
+                setFeedback({ tone: 'error', text: '回答不正确，可以继续尝试', levelId: level.id });
+              }
+            } else {
+              var area = el('s-text');
+              var note = area ? area.value.trim() : '';
+              if (level.needFile && !pickedFile) throw new Error('本关需要上传文件');
+              if (!note && !pickedFile) throw new Error('请填写内容或上传文件');
+              var fileId = null;
+              if (pickedFile) fileId = await uploadFile(level);
+              var body = { lessonId: LESSON, levelId: level.id, text: note };
+              if (fileId) body.fileId = fileId;
+              await api.post('submission', body);
+              pickedFile = null;
+              setFeedback({ tone: 'success', text: '提交成功，正在解锁下一关', levelId: level.id });
+            }
+          } catch (err) {
+            setFeedback({ tone: 'error', text: (err && err.message) || '提交失败，请重试', levelId: level.id });
+          } finally {
+            lockUi(false);
+            await fetchState();
+          }
+        }
+
+        document.getElementById('app').addEventListener('click', function (ev) {
+          var btn = ev.target.closest('[data-act]');
+          if (!btn || busy) return;
+          var level = currentLevel();
+          if (!level) return;
+          if (btn.getAttribute('data-act') === 'submit') void submitCurrent(level);
+        });
+
+        document.getElementById('app').addEventListener('change', async function (ev) {
+          if (ev.target && ev.target.id === 'file-input') {
+            var file = ev.target.files && ev.target.files[0];
+            if (!file) return;
+            if (file.size > MAX_FILE) {
+              pickedFile = null;
+              setFeedback({ tone: 'error', text: '文件不能超过 1.5MB', levelId: state && state.currentLevelId });
+              var nameNode = el('file-name');
+              if (nameNode) nameNode.textContent = '未选择文件';
+              return;
+            }
+            setUploadLine('正在读取文件…');
+            try {
+              var b64 = await readBase64(file);
+              pickedFile = { name: file.name, size: file.size, mime: file.type || 'application/octet-stream', b64: b64 };
+              setUploadLine('');
+              var label = el('file-name');
+              if (label) label.textContent = file.name + ' · ' + Math.ceil(file.size / 1024) + 'KB';
+            } catch (err) {
+              pickedFile = null;
+              setUploadLine('');
+              setFeedback({ tone: 'error', text: '读取文件失败，请重试', levelId: state && state.currentLevelId });
+            }
+          }
+        });
+
+        bridge.onInit(function (ctx) {
+          LESSON = ctx.lessonId || '';
+          document.documentElement.setAttribute('data-theme', ctx.theme === 'dark' ? 'dark' : 'light');
+          void fetchState();
+          if (timer) clearInterval(timer);
+          timer = setInterval(function () {
+            void fetchState();
+          }, 3000);
+        });
+
+        bridge.onContextUpdate(function (ctx) {
+          document.documentElement.setAttribute('data-theme', ctx.theme === 'dark' ? 'dark' : 'light');
+          var next = ctx.lessonId || '';
+          if (next !== LESSON) {
+            LESSON = next;
+            state = null;
+            sig = '';
+            feedback = null;
+            pickedFile = null;
+            void fetchState();
+          }
+        });
+
+        window.addEventListener('resize', resize);
+      })();
+    </script>
+  </body>
+</html>

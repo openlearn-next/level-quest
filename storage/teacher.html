@@ -1,0 +1,1592 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>课堂闯关 · 教师</title>
+    <script src="/plugin-sandbox/view-bridge.js"></script>
+    <style>
+      :root {
+        --bg: #f8fafc;
+        --card: #ffffff;
+        --text: #0f172a;
+        --muted: #64748b;
+        --line: #e2e8f0;
+        --brand: #4f46e5;
+        --brand-weak: #eef2ff;
+        --ok: #059669;
+        --ok-weak: #ecfdf5;
+        --bad: #dc2626;
+        --bad-weak: #fef2f2;
+        --warn: #b45309;
+        --warn-weak: #fffbeb;
+        --shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+      }
+      [data-theme='dark'] {
+        --bg: #0b1220;
+        --card: #111c33;
+        --text: #e2e8f0;
+        --muted: #94a3b8;
+        --line: #24314a;
+        --brand: #818cf8;
+        --brand-weak: #1e1b4b;
+        --ok: #34d399;
+        --ok-weak: #052e26;
+        --bad: #f87171;
+        --bad-weak: #3b1213;
+        --warn: #fbbf24;
+        --warn-weak: #3a2a08;
+        --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+      #app {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .page {
+        padding: 14px 16px 28px;
+        max-width: 1180px;
+        width: 100%;
+        margin: 0 auto;
+        flex: 1;
+      }
+      .stack {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .row.between {
+        justify-content: space-between;
+      }
+      .row.end {
+        justify-content: flex-end;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 16px;
+      }
+      header.top {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background: var(--bg);
+        border-bottom: 1px solid var(--line);
+        padding: 10px 16px;
+      }
+      .top-inner {
+        max-width: 1180px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .kicker {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        color: var(--brand);
+      }
+      h1 {
+        font-size: 17px;
+        margin: 2px 0 0;
+      }
+      h2 {
+        font-size: 14.5px;
+        margin: 0;
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 12.5px;
+      }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        background: var(--brand-weak);
+        color: var(--brand);
+        white-space: nowrap;
+      }
+      .pill.active {
+        background: var(--ok-weak);
+        color: var(--ok);
+      }
+      .pill.ended {
+        background: var(--warn-weak);
+        color: var(--warn);
+      }
+      .pill.idle {
+        background: var(--bg);
+        color: var(--muted);
+        border: 1px solid var(--line);
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+      .tabs {
+        display: flex;
+        gap: 4px;
+        padding: 0 16px;
+        max-width: 1180px;
+        margin: 0 auto;
+        width: 100%;
+        border-bottom: 1px solid var(--line);
+        background: var(--bg);
+      }
+      .tabs button {
+        background: transparent;
+        color: var(--muted);
+        border: none;
+        border-bottom: 2px solid transparent;
+        border-radius: 0;
+        padding: 9px 14px;
+        font-size: 13.5px;
+      }
+      .tabs button.on {
+        color: var(--brand);
+        border-bottom-color: var(--brand);
+        font-weight: 700;
+      }
+      button {
+        border: none;
+        border-radius: 9px;
+        padding: 8px 14px;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        background: var(--brand);
+        color: #fff;
+      }
+      button.ghost {
+        background: transparent;
+        border: 1px solid var(--line);
+        color: var(--text);
+      }
+      button.ghost:hover {
+        border-color: var(--brand);
+        color: var(--brand);
+      }
+      button.danger {
+        background: transparent;
+        border: 1px solid var(--bad);
+        color: var(--bad);
+      }
+      button.small {
+        padding: 4px 10px;
+        font-size: 12px;
+        border-radius: 7px;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      button.icon {
+        padding: 4px 8px;
+        font-size: 12px;
+        background: transparent;
+        border: 1px solid var(--line);
+        color: var(--text);
+      }
+      input,
+      select,
+      textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        padding: 8px 10px;
+        font: inherit;
+        font-size: 13px;
+        color: var(--text);
+        background: var(--bg);
+      }
+      textarea {
+        resize: vertical;
+      }
+      input:focus,
+      select:focus,
+      textarea:focus {
+        outline: 2px solid var(--brand-weak);
+        border-color: var(--brand);
+      }
+      .grid2 {
+        display: grid;
+        grid-template-columns: minmax(120px, 160px) 1fr;
+        gap: 10px;
+      }
+      @media (max-width: 640px) {
+        .grid2 {
+          grid-template-columns: 1fr;
+        }
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .field > span {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+      }
+      .banner {
+        border-radius: 10px;
+        padding: 9px 12px;
+        font-size: 13px;
+      }
+      .banner.success {
+        background: var(--ok-weak);
+        color: var(--ok);
+      }
+      .banner.error {
+        background: var(--bad-weak);
+        color: var(--bad);
+      }
+      .banner.info {
+        background: var(--brand-weak);
+        color: var(--brand);
+      }
+      .banner.warn {
+        background: var(--warn-weak);
+        color: var(--warn);
+      }
+      .empty {
+        text-align: center;
+        padding: 32px 16px;
+        color: var(--muted);
+      }
+      .lv-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .lv-no {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 8px;
+        background: var(--brand);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--card);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        min-width: 780px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: middle;
+      }
+      th {
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 600;
+        background: var(--bg);
+        white-space: nowrap;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      td.actions {
+        white-space: nowrap;
+      }
+      td.actions button + button {
+        margin-left: 6px;
+      }
+      .chips {
+        display: flex;
+        gap: 3px;
+        flex-wrap: wrap;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 22px;
+        height: 20px;
+        padding: 0 5px;
+        border-radius: 999px;
+        font-size: 10.5px;
+        font-weight: 700;
+        border: 1px solid var(--line);
+        color: var(--muted);
+      }
+      .chip.done {
+        border-color: transparent;
+        background: var(--ok-weak);
+        color: var(--ok);
+      }
+      .chip.current {
+        border-color: transparent;
+        background: var(--brand);
+        color: #fff;
+      }
+      .chip.released {
+        outline: 1px dashed var(--ok);
+        outline-offset: 1px;
+      }
+      .stat {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--card);
+        min-width: 120px;
+        flex: 1;
+      }
+      .stat b {
+        font-size: 20px;
+        line-height: 1.2;
+      }
+      .overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        z-index: 100;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+      }
+      .modal {
+        background: var(--card);
+        border-radius: 14px;
+        box-shadow: var(--shadow);
+        padding: 18px;
+        width: 100%;
+        max-width: 420px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .drawer-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.4);
+        z-index: 90;
+        display: flex;
+        justify-content: flex-end;
+      }
+      .drawer {
+        width: min(520px, 100%);
+        height: 100%;
+        background: var(--card);
+        box-shadow: var(--shadow);
+        padding: 16px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .attempt {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .attempt .head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .tag {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 1px 7px;
+        border-radius: 999px;
+        background: var(--bg);
+        color: var(--muted);
+        border: 1px solid var(--line);
+      }
+      .tag.ok {
+        background: var(--ok-weak);
+        color: var(--ok);
+        border-color: transparent;
+      }
+      .tag.bad {
+        background: var(--bad-weak);
+        color: var(--bad);
+        border-color: transparent;
+      }
+      .attempt .body {
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 13px;
+      }
+      .spin {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border: 2px solid var(--line);
+        border-top-color: var(--brand);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        vertical-align: -2px;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="drawer-root"></div>
+    <div id="modal-root"></div>
+
+    <script>
+      (function () {
+        'use strict';
+
+        var bridge = window.OpenLearnPluginBridge;
+        var api = bridge.api;
+        var LESSON = '';
+        var CLASS = '';
+        var tab = 'design';
+        var cfg = null;
+        var levels = [];
+        var dash = null;
+        var error = '';
+        var busy = false;
+        var dirty = false;
+        var seqCounter = 0;
+        var timer = null;
+        var lastDashJson = '';
+        var drawer = null;
+        var modal = null;
+
+        function el(id) {
+          return document.getElementById(id);
+        }
+        function esc(v) {
+          return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+          });
+        }
+        function letter(i) {
+          return String.fromCharCode(65 + i);
+        }
+        function toast(msg, tone) {
+          try {
+            bridge.ui.toast(msg, tone || 'info');
+          } catch (e) {}
+        }
+        function active() {
+          return !!cfg && cfg.status === 'active';
+        }
+        function statusPill() {
+          var s = cfg ? cfg.status : 'idle';
+          var cls = s === 'active' ? 'active' : s === 'ended' ? 'ended' : 'idle';
+          var text = s === 'active' ? '进行中' : s === 'ended' ? '已结束' : '未开始';
+          return '<span class="pill ' + cls + '"><span class="dot"></span>' + text + '</span>';
+        }
+        function fmtTime(ts) {
+          if (!ts) return '—';
+          try {
+            return new Date(ts).toLocaleString('zh-CN', { hour12: false });
+          } catch (e) {
+            return String(ts);
+          }
+        }
+        function ago(ts) {
+          if (!ts) return '—';
+          var d = Date.now() - Number(ts);
+          if (d < 60000) return '刚刚';
+          if (d < 3600000) return Math.floor(d / 60000) + ' 分钟前';
+          if (d < 86400000) return Math.floor(d / 3600000) + ' 小时前';
+          return Math.floor(d / 86400000) + ' 天前';
+        }
+        function safeParse(raw) {
+          if (typeof raw !== 'string' || !raw) return null;
+          try {
+            return JSON.parse(raw);
+          } catch (e) {
+            return null;
+          }
+        }
+
+        // ── 关卡草稿 ──────────────────────────────────────────────────────
+        function hydrate(l) {
+          var type = l.type === 'manual' || l.type === 'submission' ? l.type : 'quiz';
+          var qt = l.questionType === 'multiple' || l.questionType === 'judge' || l.questionType === 'text' ? l.questionType : 'single';
+          var ans = l.answer;
+          if (type === 'quiz') {
+            if (qt === 'text') ans = typeof ans === 'string' ? ans : '';
+            else if (qt === 'multiple') ans = Array.isArray(ans) ? ans.slice() : [];
+            else ans = typeof ans === 'number' ? ans : null;
+          } else {
+            ans = null;
+          }
+          return {
+            key: l.id || 'new-' + ++seqCounter,
+            id: l.id || null,
+            persisted: !!l.id,
+            type: type,
+            title: l.title || '',
+            prompt: l.prompt || '',
+            questionType: qt,
+            options: Array.isArray(l.options) ? l.options.slice() : [],
+            answer: ans,
+            needFile: l.needFile === true,
+          };
+        }
+        function blankLevel() {
+          return {
+            key: 'new-' + ++seqCounter,
+            id: null,
+            persisted: false,
+            type: 'quiz',
+            title: '',
+            prompt: '',
+            questionType: 'single',
+            options: ['', ''],
+            answer: null,
+            needFile: false,
+          };
+        }
+        function ansLetters(arr) {
+          return (Array.isArray(arr) ? arr : []).slice().sort(function (a, b) {
+            return a - b;
+          }).map(letter).join(',');
+        }
+
+        // ── 数据加载 ──────────────────────────────────────────────────────
+        async function loadConfig() {
+          var data = await api.get('config?lessonId=' + encodeURIComponent(LESSON));
+          cfg = data;
+          levels = (data.levels || []).map(hydrate);
+          dirty = false;
+          lastDashJson = '';
+        }
+
+        async function refreshMeta() {
+          var data = await api.get('config?lessonId=' + encodeURIComponent(LESSON));
+          cfg = Object.assign({}, cfg || {}, {
+            status: data.status,
+            participantCount: data.participantCount,
+            startedAt: data.startedAt,
+            endedAt: data.endedAt,
+            classId: data.classId,
+          });
+        }
+
+        async function fetchDash() {
+          try {
+            var data = await api.get('dashboard?lessonId=' + encodeURIComponent(LESSON));
+            dash = data;
+            error = '';
+            if (data.status && cfg) cfg.status = data.status;
+            var json = JSON.stringify(data);
+            if (json === lastDashJson) return;
+            lastDashJson = json;
+          } catch (err) {
+            error = (err && err.message) || '看板加载失败';
+          }
+          render();
+        }
+
+        function startPolling() {
+          stopPolling();
+          if (tab !== 'dash') return;
+          timer = setInterval(function () {
+            if (document.visibilityState === 'hidden') return;
+            void fetchDash();
+          }, 3000);
+        }
+        function stopPolling() {
+          if (timer) {
+            clearInterval(timer);
+            timer = null;
+          }
+        }
+
+        // ── 渲染 ─────────────────────────────────────────────────────────
+        function render() {
+          var app = el('app');
+          if (!LESSON) {
+            app.innerHTML = '<div class="page"><div class="card empty">请先在课程页选择一节课。</div></div>';
+            return;
+          }
+          app.innerHTML =
+            headerHtml() +
+            tabsHtml() +
+            '<div class="page stack">' +
+            (error ? '<div class="banner error">' + esc(error) + '</div>' : '') +
+            (tab === 'dash' ? dashHtml() : designHtml()) +
+            '</div>';
+          updateSaveState();
+        }
+
+        function headerHtml() {
+          var meta = cfg
+            ? statusPill() +
+              ' <span class="muted">' +
+              esc(cfg.levels ? cfg.levels.length : levels.length) +
+              ' 关' +
+              (cfg.status === 'active' && cfg.startedAt ? ' · 开始于 ' + esc(fmtTime(cfg.startedAt)) : '') +
+              (cfg.status === 'ended' && cfg.endedAt ? ' · 结束于 ' + esc(fmtTime(cfg.endedAt)) : '') +
+              '</span>'
+            : '<span class="muted"><span class="spin"></span> 加载中…</span>';
+          var actions = '';
+          if (cfg) {
+            actions = active()
+              ? '<button class="danger" data-act="open-end"' + (busy ? ' disabled' : '') + '>结束闯关</button>'
+              : '<button data-act="open-start"' + (busy ? ' disabled' : '') + '>开始闯关</button>';
+          }
+          return (
+            '<header class="top"><div class="top-inner">' +
+            '<div style="flex:1;min-width:180px">' +
+            '<div class="kicker">课堂闯关</div>' +
+            '<h1>按顺序解锁 · 学生各自推进</h1>' +
+            '</div>' +
+            '<div class="row">' +
+            meta +
+            actions +
+            '</div>' +
+            '</div></header>'
+          );
+        }
+
+        function tabsHtml() {
+          var n = dash && dash.students ? dash.students.length : 0;
+          return (
+            '<div class="tabs">' +
+            '<button data-act="tab" data-tab="design" class="' + (tab === 'design' ? 'on' : '') + '">关卡设计</button>' +
+            '<button data-act="tab" data-tab="dash" class="' + (tab === 'dash' ? 'on' : '') + '">实时看板' + (n ? ' · ' + n : '') + '</button>' +
+            '</div>'
+          );
+        }
+
+        function designHtml() {
+          var locked = active();
+          var head =
+            '<div class="card stack" style="padding:12px 14px">' +
+            '<div class="row between">' +
+            '<div>' +
+            '<h2>关卡设计</h2>' +
+            '<div class="muted">保存后学生按顺序闯关；闯关进行中不能修改关卡。</div>' +
+            '</div>' +
+            '<div class="row">' +
+            '<span class="muted" id="dirty-dot">' + (dirty ? '有未保存修改' : '') + '</span>' +
+            '<button class="ghost" data-act="add-level"' + (locked ? ' disabled' : '') + '>添加关卡</button>' +
+            '<button data-act="save-levels"' + (locked ? ' disabled' : '') + '>保存关卡</button>' +
+            '</div>' +
+            '</div>' +
+            (locked ? '<div class="banner warn">闯关进行中，关卡已锁定。请结束本次闯关后再修改。</div>' : '') +
+            '</div>';
+
+          if (levels.length === 0) {
+            return head + '<div class="card empty">还没有关卡。点击「添加关卡」开始设计。</div>';
+          }
+          return head + levels.map(levelCardHtml).join('');
+        }
+
+        function levelCardHtml(l, i) {
+          var locked = active();
+          var dis = locked ? ' disabled' : '';
+          var head =
+            '<div class="lv-head">' +
+            '<div class="row"><span class="lv-no">' + (i + 1) + '</span><span class="muted">' +
+            (l.type === 'quiz' ? '答题' : l.type === 'manual' ? '手动完成' : '作业提交') +
+            '</span></div>' +
+            '<div class="row">' +
+            '<button class="icon" data-act="move-up" data-i="' + i + '"' + (locked || i === 0 ? ' disabled' : '') + '>上移</button>' +
+            '<button class="icon" data-act="move-down" data-i="' + i + '"' + (locked || i === levels.length - 1 ? ' disabled' : '') + '>下移</button>' +
+            '<button class="icon" data-act="del-level" data-i="' + i + '"' + (locked ? ' disabled' : '') + '>删除</button>' +
+            '</div>' +
+            '</div>';
+
+          var base =
+            '<div class="grid2">' +
+            '<label class="field"><span>关卡类型</span><select data-k="type" data-i="' + i + '"' + dis + '>' +
+            sel('quiz', '答题', l.type) + sel('manual', '手动完成', l.type) + sel('submission', '作业提交', l.type) +
+            '</select></label>' +
+            '<label class="field"><span>标题</span><input type="text" data-k="title" data-i="' + i + '" value="' + esc(l.title) + '" placeholder="如：第 1 关 · 概念辨析"' + dis + ' /></label>' +
+            '</div>' +
+            '<label class="field" style="margin-top:10px"><span>题目 / 任务说明</span><textarea rows="2" data-k="prompt" data-i="' + i + '" placeholder="学生看到的说明" ' + dis + '>' + esc(l.prompt) + '</textarea></label>';
+
+          var extra = '';
+          if (l.type === 'quiz') extra = quizFields(l, i, dis);
+          else if (l.type === 'manual') extra = '<div class="banner info" style="margin-top:10px">学生看到操作要求后，点击「我已完成本关」即可过关。</div>';
+          else {
+            extra =
+              '<label class="row" style="margin-top:10px;gap:8px">' +
+              '<input type="checkbox" data-k="needFile" data-i="' + i + '"' + (l.needFile ? ' checked' : '') + dis + ' style="width:auto;margin:0" />' +
+              '<span class="muted">本关必须上传文件（≤1.5MB）</span>' +
+              '</label>';
+          }
+
+          return '<div class="card stack" data-key="' + esc(l.key) + '">' + head + base + extra + '</div>';
+        }
+
+        function quizFields(l, i, dis) {
+          var qt = l.questionType;
+          var html =
+            '<div class="grid2" style="margin-top:10px">' +
+            '<label class="field"><span>题型</span><select data-k="questionType" data-i="' + i + '"' + dis + '>' +
+            sel('single', '单选', qt) + sel('multiple', '多选', qt) + sel('judge', '判断', qt) + sel('text', '填空题', qt) +
+            '</select></label>';
+
+          if (qt === 'text') {
+            html +=
+              '<label class="field"><span>参考答案</span><input type="text" data-k="answer-text" data-i="' + i + '" value="' + esc(l.answer || '') + '" placeholder="比对时忽略空格与换行，大小写不敏感"' + dis + ' /></label>';
+          } else if (qt === 'judge') {
+            html +=
+              '<label class="field"><span>正确答案</span><select data-k="answer-judge" data-i="' + i + '"' + dis + '>' +
+              '<option value=""' + (l.answer == null ? ' selected' : '') + '>请选择</option>' +
+              '<option value="0"' + (l.answer === 0 ? ' selected' : '') + '>对</option>' +
+              '<option value="1"' + (l.answer === 1 ? ' selected' : '') + '>错</option>' +
+              '</select></label>';
+          } else if (qt === 'multiple') {
+            html +=
+              '<label class="field"><span>正确选项</span><input type="text" data-k="answer-multiple" data-i="' + i + '" value="' + esc(ansLetters(l.answer)) + '" placeholder="如 A,C（多选用逗号分隔）"' + dis + ' /></label>';
+          } else {
+            html += '<label class="field"><span>正确答案</span><select data-k="answer-single" data-i="' + i + '"' + dis + '>' + singleOptions(l) + '</select></label>';
+          }
+          html += '</div>';
+
+          if (qt !== 'text' && qt !== 'judge') {
+            html +=
+              '<label class="field" style="margin-top:10px"><span>选项（每行一个，2–8 个）</span><textarea rows="' +
+              Math.max(3, Math.min(8, l.options.length)) +
+              '" data-k="options" data-i="' + i + '"' + dis + '>' + esc(l.options.join('\n')) + '</textarea></label>';
+          }
+          return html;
+        }
+
+        function singleOptions(l) {
+          var out = '<option value="">请选择</option>';
+          for (var i = 0; i < l.options.length; i++) {
+            var text = String(l.options[i] == null ? '' : l.options[i]).trim();
+            out += '<option value="' + i + '"' + (l.answer === i ? ' selected' : '') + '>' + letter(i) + '. ' + esc(text || '（未填写）') + '</option>';
+          }
+          return out;
+        }
+
+        function sel(value, label, current) {
+          return '<option value="' + value + '"' + (current === value ? ' selected' : '') + '>' + label + '</option>';
+        }
+
+        function progressChips(completed, released, currentId) {
+          var done = {};
+          (completed || []).forEach(function (id) {
+            done[id] = true;
+          });
+          var rel = {};
+          (released || []).forEach(function (id) {
+            rel[id] = true;
+          });
+          return (cfg && cfg.levels ? cfg.levels : levels)
+            .map(function (l, idx) {
+              var cls = done[l.id] ? 'done' : l.id === currentId ? 'current' : 'locked';
+              if (done[l.id] && rel[l.id]) cls += ' released';
+              return '<span class="chip ' + cls + '" title="' + esc(l.title || '') + '">' + (idx + 1) + '</span>';
+            })
+            .join('');
+        }
+
+        function dashHtml() {
+          if (!dash) {
+            return '<div class="card empty"><span class="spin"></span> 正在加载看板…</div>';
+          }
+          var total = dash.levels ? dash.levels.length : 0;
+          var stats =
+            '<div class="row" style="gap:10px;align-items:stretch">' +
+            '<div class="stat"><span class="muted">状态</span><b style="font-size:15px">' +
+            (dash.status === 'active' ? '进行中' : dash.status === 'ended' ? '已结束' : '未开始') +
+            '</b></div>' +
+            '<div class="stat"><span class="muted">参与学生</span><b>' + (dash.participantCount || 0) + '</b></div>' +
+            '<div class="stat"><span class="muted">已全部通关</span><b>' + (dash.doneCount || 0) + '</b></div>' +
+            '<div class="stat"><span class="muted">关卡数</span><b>' + total + '</b></div>' +
+            '</div>';
+
+          var perLevel =
+            total > 0
+              ? '<div class="card" style="padding:12px 14px"><div class="row"><span class="muted" style="margin-right:4px">各关通过人数</span>' +
+                dash.levels
+                  .map(function (l) {
+                    return '<span class="chip done" title="' + esc(l.title) + '">' + l.seq + ' · ' + l.completedCount + '</span>';
+                  })
+                  .join('') +
+                '</div></div>'
+              : '';
+
+          if (!dash.students || dash.students.length === 0) {
+            return (
+              stats +
+              perLevel +
+              '<div class="card empty">' +
+              (dash.status === 'active'
+                ? '学生进入课堂后，这里会实时显示各自的闯关进度。'
+                : '还没有学生开始闯关。' + (total ? '点击右上角「开始闯关」启动本次课堂。' : '请先在「关卡设计」中添加关卡。')) +
+              '</div>'
+            );
+          }
+
+          var rows = dash.students
+            .map(function (s) {
+              var currentIdx = -1;
+              for (var i = 0; i < (dash.levels || []).length; i++) {
+                if (dash.levels[i].id === s.currentLevelId) {
+                  currentIdx = i;
+                  break;
+                }
+              }
+              var current =
+                s.currentLevelId && currentIdx >= 0
+                  ? '<div>第 ' + (currentIdx + 1) + ' 关 · ' + esc(dash.levels[currentIdx].title) + '</div><div class="muted">' +
+                    (dash.levels[currentIdx].type === 'quiz' ? '答题' : dash.levels[currentIdx].type === 'manual' ? '手动完成' : '作业提交') +
+                    '</div>'
+                  : '<span class="tag ok">已完成</span>';
+              var tries = s.currentLevelId && s.attemptCounts && s.attemptCounts[s.currentLevelId] != null ? s.attemptCounts[s.currentLevelId] : '—';
+              var hasAny = (s.completedCount || 0) > 0;
+              return (
+                '<tr>' +
+                '<td class="mono">' + esc(s.id) + '</td>' +
+                '<td><div class="chips">' + progressChips(s.completed, s.released, s.currentLevelId) + '</div></td>' +
+                '<td>' + current + '</td>' +
+                '<td>' + tries + '</td>' +
+                '<td class="muted">' + esc(ago(s.lastActivityAt)) + '</td>' +
+                '<td class="actions">' +
+                '<button class="small" data-act="release" data-sid="' + esc(s.id) + '"' + (!s.currentLevelId || busy ? ' disabled' : '') + '>放行</button>' +
+                '<button class="small ghost" data-act="reset" data-sid="' + esc(s.id) + '"' + (!hasAny || busy ? ' disabled' : '') + '>重置</button>' +
+                '<button class="small ghost" data-act="open-drawer" data-sid="' + esc(s.id) + '" data-level="' + esc(s.currentLevelId || '') + '">记录</button>' +
+                '</td>' +
+                '</tr>'
+              );
+            })
+            .join('');
+
+          return (
+            stats +
+            perLevel +
+            '<div class="table-wrap"><table>' +
+            '<thead><tr><th>学生</th><th>进度</th><th>当前关卡</th><th>本关尝试</th><th>最近活动</th><th>操作</th></tr></thead>' +
+            '<tbody>' + rows + '</tbody>' +
+            '</table></div>' +
+            '<div class="muted">看板每 3 秒自动刷新。学生标识来自登录会话。</div>'
+          );
+        }
+
+        function drawerRootHtml() {
+          if (!drawer) return '';
+          var levelsForSelect = (cfg && cfg.levels ? cfg.levels : levels).filter(function (l) {
+            return l.id;
+          });
+          var options = levelsForSelect
+            .map(function (l, i) {
+              return '<option value="' + esc(l.id) + '"' + (drawer.levelId === l.id ? ' selected' : '') + '>第 ' + (i + 1) + ' 关 · ' + esc(l.title) + '</option>';
+            })
+            .join('');
+          var body = '';
+          if (drawer.loading) body = '<div class="card empty"><span class="spin"></span> 加载中…</div>';
+          else if (drawer.error) body = '<div class="banner error">' + esc(drawer.error) + '</div>';
+          else if (!drawer.rows || drawer.rows.length === 0) body = '<div class="card empty">该关卡还没有作答记录。</div>';
+          else body = drawer.rows.map(attemptHtml).join('');
+
+          return (
+            '<div class="drawer-overlay" data-act="drawer-bg"><aside class="drawer">' +
+            '<div class="row between"><h2>作答记录</h2><button class="ghost small" data-act="close-drawer">关闭</button></div>' +
+            '<div class="muted">学生 <span class="mono">' + esc(drawer.sid) + '</span> · 最多显示最近 30 条</div>' +
+            (levelsForSelect.length ? '<select data-act="drawer-level">' + options + '</select>' : '') +
+            '<div class="stack">' + body + '</div>' +
+            '</aside></div>'
+          );
+        }
+
+        function attemptHtml(a) {
+          var kindMap = { quiz: '答题', manual: '手动完成', submission: '作业提交', release: '教师放行', reset: '教师重置' };
+          var tag = '<span class="tag">' + esc(kindMap[a.kind] || a.kind) + '</span>';
+          if (a.kind === 'quiz') {
+            tag += a.correct === 1 ? '<span class="tag ok">正确</span>' : a.correct === 0 ? '<span class="tag bad">错误</span>' : '';
+          }
+          var body = attemptText(a);
+          var file = '';
+          if (a.file) {
+            file = '<div class="row"><button class="small ghost" data-act="download" data-fid="' + esc(a.file.id) + '">下载附件 ' + esc(a.file.name) + '（' + Math.ceil(Number(a.file.size || 0) / 1024) + 'KB）</button></div>';
+          }
+          return (
+            '<div class="attempt">' +
+            '<div class="head">' + tag + '<span class="muted" style="margin-left:auto">' + esc(fmtTime(a.createdAt)) + '</span></div>' +
+            (body ? '<div class="body">' + esc(body) + '</div>' : '') +
+            file +
+            '</div>'
+          );
+        }
+
+        function attemptText(a) {
+          var p = safeParse(a.payload);
+          if (a.kind === 'quiz') {
+            if (p && typeof p.text === 'string') return '作答：' + p.text;
+            if (p && Array.isArray(p.choices)) return '选择：' + p.choices.map(letter).join('、');
+            if (p && typeof p.choice === 'number') return '选择：' + letter(p.choice);
+            return '';
+          }
+          if (a.kind === 'submission') {
+            var parts = [];
+            if (p && p.text) parts.push(p.text);
+            if (p && p.fileName) parts.push('附件：' + p.fileName);
+            return parts.join('\n');
+          }
+          if (a.kind === 'manual') return '学生自报已完成';
+          if (a.kind === 'release') return '教师放行，直接进入下一关';
+          if (a.kind === 'reset') return p && p.scope === 'all' ? '教师清空全部进度' : '教师回退一关';
+          return a.payload || '';
+        }
+
+        function modalRootHtml() {
+          if (!modal) return '';
+          var body = '';
+          if (modal.kind === 'start') {
+            body =
+              '<h2>开始闯关</h2>' +
+              '<div class="muted">本课堂已保存 ' + levels.length + ' 关。上一轮已有 ' + (cfg && cfg.participantCount ? cfg.participantCount : 0) + ' 名学生的进度。</div>' +
+              '<div class="banner info">「沿用」会保留学生已完成到第几关；「清空」会从第一关重新开始。</div>' +
+              '<div class="row end">' +
+              '<button class="ghost" data-act="modal-close">取消</button>' +
+              '<button class="ghost danger" data-act="start-reset">清空进度后开始</button>' +
+              '<button data-act="start-keep">沿用上次进度</button>' +
+              '</div>';
+          } else if (modal.kind === 'end') {
+            body =
+              '<h2>结束本次闯关？</h2>' +
+              '<div class="muted">结束后学生无法继续提交，已产生的进度与作答记录会保留，可用于下次「沿用」。</div>' +
+              '<div class="row end"><button class="ghost" data-act="modal-close">取消</button><button class="danger" data-act="end-confirm">结束闯关</button></div>';
+          } else if (modal.kind === 'reset') {
+            body =
+              '<h2>重置学生进度</h2>' +
+              '<div class="muted">学生 <span class="mono">' + esc(modal.sid) + '</span></div>' +
+              '<div class="row end" style="justify-content:flex-start">' +
+              '<button class="ghost" data-act="reset-current" data-sid="' + esc(modal.sid) + '">回退一关</button>' +
+              '<button class="ghost danger" data-act="reset-all" data-sid="' + esc(modal.sid) + '">清空全部进度</button>' +
+              '</div>' +
+              '<div class="row end"><button class="ghost" data-act="modal-close">取消</button></div>';
+          }
+          return '<div class="overlay" data-act="modal-bg"><div class="modal">' + body + '</div></div>';
+        }
+
+        function renderModal() {
+          el('modal-root').innerHTML = modalRootHtml();
+        }
+
+        function renderDrawer() {
+          el('drawer-root').innerHTML = drawerRootHtml();
+        }
+
+        function updateSaveState() {
+          var b = document.querySelector('[data-act="save-levels"]');
+          if (b) b.disabled = !!busy || active();
+          var a = document.querySelector('[data-act="add-level"]');
+          if (a) a.disabled = !!busy || active();
+          var d = el('dirty-dot');
+          if (d) d.textContent = dirty ? '有未保存修改' : '';
+        }
+
+        // ── 编辑事件 ──────────────────────────────────────────────────────
+        function onField(ev) {
+          var t = ev.target;
+          if (!t || !t.getAttribute) return;
+          var k = t.getAttribute('data-k');
+          if (!k) return;
+          if ((t.tagName === 'SELECT' || t.type === 'checkbox') && ev.type !== 'change') return;
+          var i = Number(t.getAttribute('data-i'));
+          var l = levels[i];
+          if (!l) return;
+
+          if (k === 'type') {
+            l.type = t.value;
+            if (l.type === 'quiz' && l.options.length < 2) l.options = ['', ''];
+            dirty = true;
+            render();
+            renderDrawer();
+            return;
+          }
+          if (k === 'questionType') {
+            l.questionType = t.value;
+            if ((l.questionType === 'single' || l.questionType === 'multiple') && l.options.length < 2) l.options = ['', ''];
+            if (l.questionType === 'multiple' && !Array.isArray(l.answer)) l.answer = [];
+            if (l.questionType === 'text' && typeof l.answer !== 'string') l.answer = '';
+            if ((l.questionType === 'single' || l.questionType === 'judge') && Array.isArray(l.answer)) l.answer = null;
+            dirty = true;
+            render();
+            return;
+          }
+
+          if (k === 'title') l.title = t.value;
+          else if (k === 'prompt') l.prompt = t.value;
+          else if (k === 'options') l.options = t.value.split('\n');
+          else if (k === 'answer-text') l.answer = t.value;
+          else if (k === 'answer-judge') l.answer = t.value === '' ? null : Number(t.value);
+          else if (k === 'answer-single') l.answer = t.value === '' ? null : Number(t.value);
+          else if (k === 'answer-multiple') {
+            l.answer = Array.from(
+              new Set(
+                t.value
+                  .toUpperCase()
+                  .replace(/[，、]/g, ',')
+                  .split(/[,\s]+/)
+                  .map(function (x) {
+                    return x.charCodeAt(0) - 65;
+                  })
+                  .filter(function (n) {
+                    return Number.isInteger(n) && n >= 0 && n < l.options.length;
+                  }),
+              ),
+            ).sort(function (a, b) {
+              return a - b;
+            });
+          } else if (k === 'needFile') l.needFile = t.checked;
+          else return;
+
+          dirty = true;
+          updateSaveState();
+        }
+
+        // ── 操作 ─────────────────────────────────────────────────────────
+        function fail(msg) {
+          error = msg;
+          render();
+          toast(msg, 'error');
+        }
+
+        async function saveLevels() {
+          if (busy) return;
+          if (levels.length === 0) return fail('至少需要一个关卡');
+          if (levels.length > 50) return fail('关卡数量不能超过 50');
+
+          var payload = [];
+          for (var i = 0; i < levels.length; i++) {
+            var l = levels[i];
+            var n = i + 1;
+            if (!l.title.trim()) return fail('第 ' + n + ' 关缺少标题');
+            var item = { type: l.type, title: l.title.trim(), prompt: l.prompt };
+            if (l.persisted && l.id) item.id = l.id;
+
+            if (l.type === 'quiz') {
+              item.questionType = l.questionType;
+              if (l.questionType === 'judge') {
+                if (l.answer !== 0 && l.answer !== 1) return fail('第 ' + n + ' 关请选择正确答案');
+                item.options = ['对', '错'];
+                item.answer = l.answer;
+              } else if (l.questionType === 'text') {
+                if (!String(l.answer || '').trim()) return fail('第 ' + n + ' 关缺少参考答案');
+                item.answer = String(l.answer).trim();
+              } else {
+                var opts = l.options.map(function (x) {
+                  return String(x == null ? '' : x);
+                });
+                while (opts.length && !opts[opts.length - 1].trim()) opts.pop();
+                if (opts.some(function (x) {
+                  return !x.trim();
+                })) return fail('第 ' + n + ' 关存在空选项，请填写或删除该行');
+                if (opts.length < 2) return fail('第 ' + n + ' 关至少需要两个选项');
+                if (opts.length > 8) return fail('第 ' + n + ' 关的选项不能超过 8 个');
+                item.options = opts.map(function (x) {
+                  return x.trim();
+                });
+                if (l.questionType === 'multiple') {
+                  var picked = (Array.isArray(l.answer) ? l.answer : []).filter(function (x) {
+                    return x < item.options.length;
+                  });
+                  if (picked.length === 0) return fail('第 ' + n + ' 关缺少正确选项');
+                  item.answer = picked;
+                } else {
+                  if (typeof l.answer !== 'number' || l.answer < 0 || l.answer >= item.options.length) {
+                    return fail('第 ' + n + ' 关缺少正确答案');
+                  }
+                  item.answer = l.answer;
+                }
+              }
+            } else if (l.type === 'submission') {
+              item.needFile = l.needFile === true;
+            }
+            payload.push(item);
+          }
+
+          busy = true;
+          error = '';
+          render();
+          try {
+            var res = await api.post('levels', { lessonId: LESSON, levels: payload });
+            cfg = Object.assign({}, cfg || {}, { levels: res.levels });
+            levels = res.levels.map(hydrate);
+            dash = null;
+            lastDashJson = '';
+            dirty = false;
+            toast('已保存 ' + levels.length + ' 关', 'success');
+          } catch (err) {
+            error = (err && err.message) || '保存失败，请重试';
+          } finally {
+            busy = false;
+            render();
+          }
+        }
+
+        function openStart() {
+          if (busy) return;
+          if (levels.length === 0) {
+            tab = 'design';
+            render();
+            return fail('请先添加至少一个关卡');
+          }
+          if (dirty) {
+            tab = 'design';
+            render();
+            return fail('有未保存的修改，请先保存关卡');
+          }
+          void (async function () {
+            try {
+              await refreshMeta();
+            } catch (e) {}
+            if (cfg && cfg.participantCount > 0) {
+              modal = { kind: 'start' };
+              renderModal();
+            } else {
+              await startRun('keep');
+            }
+          })();
+        }
+
+        async function startRun(mode) {
+          modal = null;
+          renderModal();
+          busy = true;
+          error = '';
+          render();
+          try {
+            await api.post('start', { lessonId: LESSON, classId: CLASS || undefined, mode: mode });
+            await loadConfig();
+            tab = 'dash';
+            dash = null;
+            toast(mode === 'reset' ? '已清空进度并开始闯关' : '闯关已开始（沿用上次进度）', 'success');
+            render();
+            await fetchDash();
+            startPolling();
+          } catch (err) {
+            error = (err && err.message) || '开始失败，请重试';
+          } finally {
+            busy = false;
+            render();
+          }
+        }
+
+        function openEnd() {
+          if (busy || !active()) return;
+          modal = { kind: 'end' };
+          renderModal();
+        }
+
+        async function endRun() {
+          modal = null;
+          renderModal();
+          busy = true;
+          error = '';
+          render();
+          try {
+            await api.post('end', { lessonId: LESSON });
+            await loadConfig();
+            dash = null;
+            toast('本次闯关已结束', 'success');
+            render();
+            if (tab === 'dash') await fetchDash();
+          } catch (err) {
+            error = (err && err.message) || '结束失败，请重试';
+          } finally {
+            busy = false;
+            render();
+            startPolling();
+          }
+        }
+
+        async function releaseStudent(sid) {
+          if (busy) return;
+          busy = true;
+          error = '';
+          render();
+          try {
+            await api.post('release', { lessonId: LESSON, studentId: sid });
+            toast('已放行该学生', 'success');
+          } catch (err) {
+            error = (err && err.message) || '放行失败';
+          } finally {
+            busy = false;
+            lastDashJson = '';
+            await fetchDash();
+          }
+        }
+
+        async function resetStudent(sid, scope) {
+          modal = null;
+          renderModal();
+          busy = true;
+          error = '';
+          render();
+          try {
+            await api.post('reset', { lessonId: LESSON, studentId: sid, scope: scope });
+            toast(scope === 'all' ? '已清空该学生进度' : '已回退一关', 'success');
+            if (drawer && drawer.sid === sid) {
+              drawer.rows = null;
+              await loadAttempts();
+            }
+          } catch (err) {
+            error = (err && err.message) || '重置失败';
+          } finally {
+            busy = false;
+            lastDashJson = '';
+            await fetchDash();
+          }
+        }
+
+        async function openDrawer(sid, levelId) {
+          var chosen = levelId || '';
+          if (!chosen) {
+            var s = dash && dash.students ? dash.students.filter(function (x) {
+              return x.id === sid;
+            })[0] : null;
+            var done = s ? s.completed || [] : [];
+            var list = (cfg && cfg.levels ? cfg.levels : []).filter(function (l) {
+              return l.id;
+            });
+            for (var i = list.length - 1; i >= 0; i--) {
+              if (done.indexOf(list[i].id) >= 0) {
+                chosen = list[i].id;
+                break;
+              }
+            }
+          }
+          drawer = { sid: sid, levelId: chosen, rows: null, loading: true, error: '' };
+          renderDrawer();
+          await loadAttempts();
+        }
+
+        async function loadAttempts() {
+          if (!drawer) return;
+          if (!drawer.levelId) {
+            drawer.loading = false;
+            drawer.rows = [];
+            renderDrawer();
+            return;
+          }
+          drawer.loading = true;
+          drawer.error = '';
+          renderDrawer();
+          try {
+            var res = await api.get(
+              'attempts?lessonId=' +
+                encodeURIComponent(LESSON) +
+                '&studentId=' +
+                encodeURIComponent(drawer.sid) +
+                '&levelId=' +
+                encodeURIComponent(drawer.levelId),
+            );
+            drawer.rows = res.attempts || [];
+          } catch (err) {
+            drawer.error = (err && err.message) || '记录加载失败';
+          } finally {
+            drawer.loading = false;
+            renderDrawer();
+          }
+        }
+
+        async function downloadFile(fid) {
+          try {
+            var f = await api.get('file/' + encodeURIComponent(fid));
+            var bin = atob(f.data || '');
+            var bytes = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            var blob = new Blob([bytes], { type: f.mime || 'application/octet-stream' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = f.name || 'file';
+            document.body.appendChild(a);
+            a.click();
+            a.parentNode.removeChild(a);
+            setTimeout(function () {
+              URL.revokeObjectURL(url);
+            }, 5000);
+          } catch (err) {
+            toast((err && err.message) || '附件下载失败', 'error');
+          }
+        }
+
+        function switchTab(next) {
+          if (tab === next) return;
+          tab = next;
+          error = '';
+          render();
+          if (tab === 'dash') {
+            dash = null;
+            lastDashJson = '';
+            render();
+            void fetchDash();
+            startPolling();
+          } else {
+            stopPolling();
+          }
+        }
+
+        // ── 事件委托 ─────────────────────────────────────────────────────
+        el('app').addEventListener('input', onField);
+        el('app').addEventListener('change', onField);
+
+        el('app').addEventListener('click', function (ev) {
+          var btn = ev.target.closest('[data-act]');
+          if (!btn) return;
+          var act = btn.getAttribute('data-act');
+          var i = Number(btn.getAttribute('data-i'));
+
+          if (act === 'tab') {
+            switchTab(btn.getAttribute('data-tab'));
+            return;
+          }
+          if (act === 'add-level') {
+            if (active()) return;
+            if (levels.length >= 50) return fail('关卡数量不能超过 50');
+            levels.push(blankLevel());
+            dirty = true;
+            render();
+            return;
+          }
+          if (act === 'move-up' && i > 0) {
+            var up = levels[i];
+            levels[i] = levels[i - 1];
+            levels[i - 1] = up;
+            dirty = true;
+            render();
+            return;
+          }
+          if (act === 'move-down' && i < levels.length - 1) {
+            var dn = levels[i];
+            levels[i] = levels[i + 1];
+            levels[i + 1] = dn;
+            dirty = true;
+            render();
+            return;
+          }
+          if (act === 'del-level') {
+            levels.splice(i, 1);
+            dirty = true;
+            render();
+            return;
+          }
+          if (act === 'save-levels') {
+            void saveLevels();
+            return;
+          }
+          if (act === 'open-start') {
+            openStart();
+            return;
+          }
+          if (act === 'open-end') {
+            openEnd();
+            return;
+          }
+          if (act === 'release') {
+            void releaseStudent(btn.getAttribute('data-sid'));
+            return;
+          }
+          if (act === 'reset') {
+            modal = { kind: 'reset', sid: btn.getAttribute('data-sid') };
+            renderModal();
+            return;
+          }
+          if (act === 'open-drawer') {
+            void openDrawer(btn.getAttribute('data-sid'), btn.getAttribute('data-level') || '');
+            return;
+          }
+        });
+
+        el('modal-root').addEventListener('click', function (ev) {
+          var btn = ev.target.closest('[data-act]');
+          if (!btn) return;
+          var act = btn.getAttribute('data-act');
+          if (act === 'modal-bg') {
+            if (ev.target === btn) {
+              modal = null;
+              renderModal();
+            }
+            return;
+          }
+          if (act === 'modal-close') {
+            modal = null;
+            renderModal();
+            return;
+          }
+          if (act === 'start-keep') {
+            void startRun('keep');
+            return;
+          }
+          if (act === 'start-reset') {
+            void startRun('reset');
+            return;
+          }
+          if (act === 'end-confirm') {
+            void endRun();
+            return;
+          }
+          if (act === 'reset-current') {
+            void resetStudent(btn.getAttribute('data-sid'), 'current');
+            return;
+          }
+          if (act === 'reset-all') {
+            void resetStudent(btn.getAttribute('data-sid'), 'all');
+            return;
+          }
+        });
+
+        el('drawer-root').addEventListener('click', function (ev) {
+          var btn = ev.target.closest('[data-act]');
+          if (!btn) return;
+          var act = btn.getAttribute('data-act');
+          if (act === 'drawer-bg') {
+            if (ev.target === btn) {
+              drawer = null;
+              renderDrawer();
+            }
+            return;
+          }
+          if (act === 'close-drawer') {
+            drawer = null;
+            renderDrawer();
+            return;
+          }
+          if (act === 'download') {
+            void downloadFile(btn.getAttribute('data-fid'));
+            return;
+          }
+        });
+
+        el('drawer-root').addEventListener('change', function (ev) {
+          var t = ev.target;
+          if (!t || t.getAttribute('data-act') !== 'drawer-level') return;
+          if (!drawer) return;
+          drawer.levelId = t.value;
+          void loadAttempts();
+        });
+
+        // ── 生命周期 ─────────────────────────────────────────────────────
+        async function boot(ctx) {
+          LESSON = ctx.lessonId || '';
+          CLASS = ctx.classId || '';
+          document.documentElement.setAttribute('data-theme', ctx.theme === 'dark' ? 'dark' : 'light');
+          render();
+          if (!LESSON) return;
+          try {
+            await loadConfig();
+            error = '';
+            if (active()) {
+              tab = 'dash';
+              render();
+              await fetchDash();
+              startPolling();
+            } else {
+              render();
+            }
+          } catch (err) {
+            error = (err && err.message) || '加载失败，请确认教师权限后重试';
+            render();
+          }
+        }
+
+        bridge.onInit(function (ctx) {
+          void boot(ctx);
+        });
+
+        bridge.onContextUpdate(function (ctx) {
+          document.documentElement.setAttribute('data-theme', ctx.theme === 'dark' ? 'dark' : 'light');
+          var nextLesson = ctx.lessonId || '';
+          var nextClass = ctx.classId || '';
+          if (nextLesson !== LESSON || nextClass !== CLASS) {
+            LESSON = nextLesson;
+            CLASS = nextClass;
+            cfg = null;
+            levels = [];
+            dash = null;
+            lastDashJson = '';
+            drawer = null;
+            modal = null;
+            busy = false;
+            dirty = false;
+            error = '';
+            tab = 'design';
+            renderDrawer();
+            renderModal();
+            void boot(ctx);
+          }
+        });
+
+        window.addEventListener('beforeunload', stopPolling);
+
+        // view iframe 不会自动长高：内容变化时把 scrollHeight 回传宿主
+        var syncHeight = function () {
+          try {
+            bridge.ui.resize(document.body.scrollHeight);
+          } catch (err) {
+            /* 桥接未就绪时忽略 */
+          }
+        };
+        if (typeof ResizeObserver === 'function') {
+          new ResizeObserver(syncHeight).observe(document.body);
+        }
+        window.addEventListener('load', syncHeight);
+      })();
+    </script>
+  </body>
+</html>
