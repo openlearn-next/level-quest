@@ -371,6 +371,11 @@
         background: var(--brand);
         color: #fff;
       }
+      .chip.waiting {
+        border-color: var(--warn);
+        color: var(--warn);
+        background: var(--warn-weak);
+      }
       .chip.released {
         outline: 1px dashed var(--ok);
         outline-offset: 1px;
@@ -456,6 +461,11 @@
       .tag.ok {
         background: var(--ok-weak);
         color: var(--ok);
+        border-color: transparent;
+      }
+      .tag.warn {
+        background: var(--warn-weak);
+        color: var(--warn);
         border-color: transparent;
       }
       .tag.bad {
@@ -606,6 +616,7 @@
             options: Array.isArray(l.options) ? l.options.slice() : [],
             answer: ans,
             needFile: l.needFile === true,
+            unlock: l.unlock === 'teacher' ? 'teacher' : 'prev',
           };
         }
         function blankLevel() {
@@ -620,6 +631,7 @@
             options: ['', ''],
             answer: null,
             needFile: false,
+            unlock: 'prev',
           };
         }
         function ansLetters(arr) {
@@ -743,6 +755,7 @@
             '<div>' +
             '<h2>关卡设计</h2>' +
             '<div class="muted">保存后学生按顺序闯关；闯关进行中不能修改关卡。</div>' +
+            '<div class="muted" style="margin-top:4px">💡 推荐在「课程编辑器 → 环节 → 教学形态：课堂闯关」中直接配置关卡与解锁条件；本页保留完整设计器，便于集中管理。</div>' +
             '</div>' +
             '<div class="row">' +
             '<span class="muted" id="dirty-dot">' + (dirty ? '有未保存修改' : '') + '</span>' +
@@ -794,7 +807,14 @@
               '</label>';
           }
 
-          return '<div class="card stack" data-key="' + esc(l.key) + '">' + head + base + extra + '</div>';
+          return '<div class="card stack" data-key="' + esc(l.key) + '">' + head + base + extra +
+            '<label class="field" style="margin-top:10px"><span>解锁条件</span><select data-k="unlock" data-i="' + i + '"' + (locked || i === 0 ? ' disabled' : '') + '>' +
+            (i === 0
+              ? '<option value="prev">首关默认解锁（无需条件）</option>'
+              : sel('prev', '完成上一关后解锁', l.unlock || 'prev') + sel('teacher', '教师放行后解锁', l.unlock)) +
+            '</select></label>' +
+            (i === 0 ? '' : '<div class="muted">选择「教师放行后解锁」时，学生到达本关会显示等待提示，并在看板出现「待放行」。</div>') +
+            '</div>';
         }
 
         function quizFields(l, i, dis) {
@@ -845,7 +865,7 @@
           return '<option value="' + value + '"' + (current === value ? ' selected' : '') + '>' + label + '</option>';
         }
 
-        function progressChips(completed, released, currentId) {
+        function progressChips(completed, released, currentId, waitingId) {
           var done = {};
           (completed || []).forEach(function (id) {
             done[id] = true;
@@ -856,7 +876,7 @@
           });
           return (cfg && cfg.levels ? cfg.levels : levels)
             .map(function (l, idx) {
-              var cls = done[l.id] ? 'done' : l.id === currentId ? 'current' : 'locked';
+              var cls = done[l.id] ? 'done' : l.id === waitingId ? 'waiting' : l.id === currentId ? 'current' : 'locked';
               if (done[l.id] && rel[l.id]) cls += ' released';
               return '<span class="chip ' + cls + '" title="' + esc(l.title || '') + '">' + (idx + 1) + '</span>';
             })
@@ -868,6 +888,9 @@
             return '<div class="card empty"><span class="spin"></span> 正在加载看板…</div>';
           }
           var total = dash.levels ? dash.levels.length : 0;
+          var waitingCount = (dash.students || []).filter(function (s) {
+            return s.awaitingRelease;
+          }).length;
           var stats =
             '<div class="row" style="gap:10px;align-items:stretch">' +
             '<div class="stat"><span class="muted">状态</span><b style="font-size:15px">' +
@@ -875,6 +898,7 @@
             '</b></div>' +
             '<div class="stat"><span class="muted">参与学生</span><b>' + (dash.participantCount || 0) + '</b></div>' +
             '<div class="stat"><span class="muted">已全部通关</span><b>' + (dash.doneCount || 0) + '</b></div>' +
+            '<div class="stat"><span class="muted">待放行</span><b style="color:' + (waitingCount ? 'var(--warn)' : 'inherit') + '">' + waitingCount + '</b></div>' +
             '<div class="stat"><span class="muted">关卡数</span><b>' + total + '</b></div>' +
             '</div>';
 
@@ -910,25 +934,40 @@
                   break;
                 }
               }
-              var current =
-                s.currentLevelId && currentIdx >= 0
-                  ? '<div>第 ' + (currentIdx + 1) + ' 关 · ' + esc(dash.levels[currentIdx].title) + '</div><div class="muted">' +
-                    (dash.levels[currentIdx].type === 'quiz' ? '答题' : dash.levels[currentIdx].type === 'manual' ? '手动完成' : '作业提交') +
-                    '</div>'
-                  : '<span class="tag ok">已完成</span>';
+              var waitingIdx = -1;
+              for (var wi = 0; wi < (dash.levels || []).length; wi++) {
+                if (dash.levels[wi].id === s.blockedLevelId) {
+                  waitingIdx = wi;
+                  break;
+                }
+              }
+              var current = '';
+              if (s.awaitingRelease && waitingIdx >= 0) {
+                current =
+                  '<div><span class="tag warn">待放行</span> 第 ' + (waitingIdx + 1) + ' 关 · ' + esc(dash.levels[waitingIdx].title) + '</div>' +
+                  '<div class="muted">' + (s.releaseRequested ? '学生已提醒老师' : '等待教师解锁') + '</div>';
+              } else if (s.currentLevelId && currentIdx >= 0) {
+                current =
+                  '<div>第 ' + (currentIdx + 1) + ' 关 · ' + esc(dash.levels[currentIdx].title) + '</div><div class="muted">' +
+                  (dash.levels[currentIdx].type === 'quiz' ? '答题' : dash.levels[currentIdx].type === 'manual' ? '手动完成' : '作业提交') +
+                  '</div>';
+              } else {
+                current = '<span class="tag ok">已完成</span>';
+              }
               var tries = s.currentLevelId && s.attemptCounts && s.attemptCounts[s.currentLevelId] != null ? s.attemptCounts[s.currentLevelId] : '—';
               var hasAny = (s.completedCount || 0) > 0;
               return (
                 '<tr>' +
                 '<td class="mono">' + esc(s.id) + '</td>' +
-                '<td><div class="chips">' + progressChips(s.completed, s.released, s.currentLevelId) + '</div></td>' +
+                '<td><div class="chips">' + progressChips(s.completed, s.released, s.currentLevelId, s.blockedLevelId) + '</div></td>' +
                 '<td>' + current + '</td>' +
                 '<td>' + tries + '</td>' +
                 '<td class="muted">' + esc(ago(s.lastActivityAt)) + '</td>' +
                 '<td class="actions">' +
-                '<button class="small" data-act="release" data-sid="' + esc(s.id) + '"' + (!s.currentLevelId || busy ? ' disabled' : '') + '>放行</button>' +
+                (s.awaitingRelease ? '<button class="small primary" data-act="unlock" data-sid="' + esc(s.id) + '"' + (busy ? ' disabled' : '') + '>解锁</button>' : '') +
+                '<button class="small" data-act="release" data-sid="' + esc(s.id) + '"' + ((!s.currentLevelId && !s.awaitingRelease) || busy ? ' disabled' : '') + '>代过</button>' +
                 '<button class="small ghost" data-act="reset" data-sid="' + esc(s.id) + '"' + (!hasAny || busy ? ' disabled' : '') + '>重置</button>' +
-                '<button class="small ghost" data-act="open-drawer" data-sid="' + esc(s.id) + '" data-level="' + esc(s.currentLevelId || '') + '">记录</button>' +
+                '<button class="small ghost" data-act="open-drawer" data-sid="' + esc(s.id) + '" data-level="' + esc(s.currentLevelId || s.blockedLevelId || '') + '">记录</button>' +
                 '</td>' +
                 '</tr>'
               );
@@ -973,7 +1012,7 @@
         }
 
         function attemptHtml(a) {
-          var kindMap = { quiz: '答题', manual: '手动完成', submission: '作业提交', release: '教师放行', reset: '教师重置' };
+          var kindMap = { quiz: '答题', manual: '手动完成', submission: '作业提交', release: '教师代过', unlock: '教师解锁', reset: '教师重置' };
           var tag = '<span class="tag">' + esc(kindMap[a.kind] || a.kind) + '</span>';
           if (a.kind === 'quiz') {
             tag += a.correct === 1 ? '<span class="tag ok">正确</span>' : a.correct === 0 ? '<span class="tag bad">错误</span>' : '';
@@ -1007,7 +1046,8 @@
             return parts.join('\n');
           }
           if (a.kind === 'manual') return '学生自报已完成';
-          if (a.kind === 'release') return '教师放行，直接进入下一关';
+          if (a.kind === 'unlock') return '教师放行，解锁本关';
+          if (a.kind === 'release') return '教师代过，直接进入下一关';
           if (a.kind === 'reset') return p && p.scope === 'all' ? '教师清空全部进度' : '教师回退一关';
           return a.payload || '';
         }
@@ -1114,6 +1154,7 @@
               return a - b;
             });
           } else if (k === 'needFile') l.needFile = t.checked;
+          else if (k === 'unlock') l.unlock = t.value === 'teacher' ? 'teacher' : 'prev';
           else return;
 
           dirty = true;
@@ -1137,7 +1178,7 @@
             var l = levels[i];
             var n = i + 1;
             if (!l.title.trim()) return fail('第 ' + n + ' 关缺少标题');
-            var item = { type: l.type, title: l.title.trim(), prompt: l.prompt };
+            var item = { type: l.type, title: l.title.trim(), prompt: l.prompt, unlock: l.unlock === 'teacher' ? 'teacher' : 'prev' };
             if (l.persisted && l.id) item.id = l.id;
 
             if (l.type === 'quiz') {
@@ -1283,9 +1324,26 @@
           render();
           try {
             await api.post('release', { lessonId: LESSON, studentId: sid });
-            toast('已放行该学生', 'success');
+            toast('已代过当前关卡', 'success');
           } catch (err) {
             error = (err && err.message) || '放行失败';
+          } finally {
+            busy = false;
+            lastDashJson = '';
+            await fetchDash();
+          }
+        }
+
+        async function unlockStudent(sid) {
+          if (busy) return;
+          busy = true;
+          error = '';
+          render();
+          try {
+            await api.post('unlock', { lessonId: LESSON, studentId: sid });
+            toast('已解锁该学生的当前关卡', 'success');
+          } catch (err) {
+            error = (err && err.message) || '解锁失败';
           } finally {
             busy = false;
             lastDashJson = '';
@@ -1462,6 +1520,10 @@
           }
           if (act === 'release') {
             void releaseStudent(btn.getAttribute('data-sid'));
+            return;
+          }
+          if (act === 'unlock') {
+            void unlockStudent(btn.getAttribute('data-sid'));
             return;
           }
           if (act === 'reset') {

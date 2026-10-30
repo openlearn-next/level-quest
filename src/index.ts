@@ -48,7 +48,14 @@ interface UploadSession {
 interface Runtime {
   ctx: PluginContext;
   db: any;
-  tables: { configs: string; levels: string; progress: string; attempts: string; files: string };
+  tables: {
+    configs: string;
+    levels: string;
+    progress: string;
+    attempts: string;
+    files: string;
+    unlocks: string;
+  };
   uploads: Map<string, UploadSession>;
 }
 
@@ -99,6 +106,12 @@ async function ensureSchema(ctx: PluginContext): Promise<void> {
   await ctx.db.ensureTable(
     'files',
     'id TEXT PRIMARY KEY, lesson_id TEXT NOT NULL, student_id TEXT NOT NULL, level_id TEXT, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, data TEXT NOT NULL, created_at INTEGER NOT NULL',
+  );
+  // 教师放行关卡：requested_at 由学生「等待放行」时写入，granted_at 由教师解锁时写入。
+  // 两者分开存，看板才能区分「学生已求助」与「教师已放行」。
+  await ctx.db.ensureTable(
+    'unlocks',
+    'lesson_id TEXT NOT NULL, student_id TEXT NOT NULL, level_id TEXT NOT NULL, requested_at INTEGER, granted_at INTEGER, PRIMARY KEY (lesson_id, student_id, level_id)',
   );
 }
 
@@ -212,6 +225,15 @@ function normalizeQuiz(raw: any, index: number): { config: string; answer: strin
   return { config: JSON.stringify({ questionType: qt, options }), answer: JSON.stringify(answer) };
 }
 
+function withUnlock(configJson: string, rawUnlock: unknown): string {
+  const cfg = safeParse(configJson) ?? {};
+  return JSON.stringify({ ...cfg, unlock: normalizeUnlock(rawUnlock) });
+}
+
+function normalizeUnlock(raw: unknown): 'prev' | 'teacher' {
+  return raw === 'teacher' ? 'teacher' : 'prev';
+}
+
 function normalizeLevelInput(raw: any, index: number) {
   const type = raw?.type;
   if (type !== 'quiz' && type !== 'manual' && type !== 'submission') {
@@ -221,10 +243,11 @@ function normalizeLevelInput(raw: any, index: number) {
   if (!title) throw new HttpError(400, `第 ${index + 1} 关缺少标题`);
   const prompt = str(raw?.prompt).trim().slice(0, 4000);
   const id = /^[A-Za-z0-9_-]{6,64}$/.test(str(raw?.id)) ? str(raw.id) : uuid();
+  const unlock = index === 0 ? 'prev' : normalizeUnlock(raw?.unlock);
 
   if (type === 'quiz') {
     const q = normalizeQuiz(raw, index);
-    return { id, type: type as LevelType, title, prompt, config: q.config, answer: q.answer };
+    return { id, type: type as LevelType, title, prompt, config: withUnlock(q.config, unlock), answer: q.answer };
   }
   if (type === 'submission') {
     const needFile = raw?.needFile === true;
@@ -233,11 +256,11 @@ function normalizeLevelInput(raw: any, index: number) {
       type: type as LevelType,
       title,
       prompt,
-      config: JSON.stringify({ needFile }),
+      config: withUnlock(JSON.stringify({ needFile }), unlock),
       answer: '',
     };
   }
-  return { id, type: type as LevelType, title, prompt, config: '{}', answer: '' };
+  return { id, type: type as LevelType, title, prompt, config: withUnlock('{}', unlock), answer: '' };
 }
 
 function publicLevel(row: any) {
@@ -253,6 +276,8 @@ function publicLevel(row: any) {
     questionType: qt,
     options: isQuiz && qt !== 'text' && Array.isArray(cfg.options) ? cfg.options : [],
     needFile: row.type === 'submission' ? cfg.needFile === true : false,
+    // 解锁条件：prev = 完成上一关（默认）；teacher = 等待教师放行本关
+    unlock: normalizeUnlock(cfg.unlock),
   };
 }
 
@@ -284,6 +309,76 @@ async function completedSet(lessonId: string, studentId: string): Promise<Set<st
     studentId,
   ]);
   return new Set(rows.map((r) => String(r.level_id)));
+}
+
+/** 教师已放行的关卡（granted_at 非空）。学生求助但未放行不算解锁。 */
+async function grantedSet(lessonId: string, studentId: string): Promise<Set<string>> {
+  const rows = await all(
+    `SELECT level_id FROM ${T().unlocks} WHERE lesson_id = ? AND student_id = ? AND granted_at IS NOT NULL`,
+    [lessonId, studentId],
+  );
+  return new Set(rows.map((r) => String(r.level_id)));
+}
+
+/**
+ * 当前可进入的关卡。
+ *
+ * 关卡本身是严格顺序的：第一个未完成的关卡之前一定都已完成，所以只有
+ * 「本关解锁条件 = 教师放行」时才会被拦住。返回 blocked 而不是抛错，
+ * 让 /state 能把等待状态渲染给学生。
+ */
+function accessState(
+  levels: any[],
+  done: Set<string>,
+  granted: Set<string>,
+): { current: any | null; blocked: any | null; allDone: boolean } {
+  const current = levels.find((l) => !done.has(l.id)) ?? null;
+  if (!current) return { current: null, blocked: null, allDone: true };
+  const cfg = safeParse(current.config) ?? {};
+  if (normalizeUnlock(cfg.unlock) === 'teacher' && !granted.has(current.id)) {
+    return { current: null, blocked: current, allDone: false };
+  }
+  return { current, blocked: null, allDone: false };
+}
+
+/** 完成一关后给学生的下一步：下一关若需放行，返回 awaitingRelease。 */
+async function nextAfterCompletion(
+  lessonId: string,
+  studentId: string,
+  levels: any[],
+  done: Set<string>,
+): Promise<{ nextLevelId: string | null; awaitingRelease: boolean; blockedLevelId: string | null }> {
+  const granted = await grantedSet(lessonId, studentId);
+  const access = accessState(levels, done, granted);
+  return {
+    nextLevelId: access.current?.id ?? null,
+    awaitingRelease: !!access.blocked,
+    blockedLevelId: access.blocked?.id ?? null,
+  };
+}
+
+async function requestTeacherUnlock(lessonId: string, studentId: string, levelId: string): Promise<void> {
+  const now = Date.now();
+  await run(
+    `INSERT OR IGNORE INTO ${T().unlocks} (lesson_id, student_id, level_id, requested_at, granted_at) VALUES (?, ?, ?, ?, NULL)`,
+    [lessonId, studentId, levelId, now],
+  );
+  await run(
+    `UPDATE ${T().unlocks} SET requested_at = COALESCE(requested_at, ?) WHERE lesson_id = ? AND student_id = ? AND level_id = ?`,
+    [now, lessonId, studentId, levelId],
+  );
+}
+
+async function grantTeacherUnlock(lessonId: string, studentId: string, levelId: string): Promise<void> {
+  const now = Date.now();
+  await run(
+    `INSERT OR IGNORE INTO ${T().unlocks} (lesson_id, student_id, level_id, requested_at, granted_at) VALUES (?, ?, ?, NULL, ?)`,
+    [lessonId, studentId, levelId, now],
+  );
+  await run(
+    `UPDATE ${T().unlocks} SET granted_at = COALESCE(granted_at, ?) WHERE lesson_id = ? AND student_id = ? AND level_id = ?`,
+    [now, lessonId, studentId, levelId],
+  );
 }
 
 async function markCompleted(lessonId: string, studentId: string, levelId: string, released = 0): Promise<void> {
@@ -327,13 +422,11 @@ async function activeContext(lessonId: string, studentId: string) {
   const levels = await loadLevels(lessonId);
   if (levels.length === 0) throw new HttpError(409, '本课堂尚未配置关卡');
   const done = await completedSet(lessonId, studentId);
-  const current = levels.find((l) => !done.has(l.id)) ?? null;
-  if (!current) throw new HttpError(409, '你已完成全部关卡');
-  return { levels, done, current };
-}
-
-function nextIncompleteId(levels: any[], done: Set<string>): string | null {
-  return levels.find((l) => !done.has(l.id))?.id ?? null;
+  const granted = await grantedSet(lessonId, studentId);
+  const access = accessState(levels, done, granted);
+  if (access.blocked) throw new HttpError(409, '本关需要老师放行后才能解锁');
+  if (!access.current) throw new HttpError(409, '你已完成全部关卡');
+  return { levels, done, current: access.current };
 }
 
 // ── 路由 ─────────────────────────────────────────────────────────────────
@@ -450,6 +543,7 @@ function registerRoutes(ctx: PluginContext): void {
         await run(`DELETE FROM ${T().progress} WHERE lesson_id = ?`, [lessonId]);
         await run(`DELETE FROM ${T().attempts} WHERE lesson_id = ?`, [lessonId]);
         await run(`DELETE FROM ${T().files} WHERE lesson_id = ?`, [lessonId]);
+        await run(`DELETE FROM ${T().unlocks} WHERE lesson_id = ?`, [lessonId]);
       }
       if (cfg) {
         await run(
@@ -506,12 +600,31 @@ function registerRoutes(ctx: PluginContext): void {
         [lessonId],
       );
       const fileRows = await all(`SELECT DISTINCT student_id FROM ${T().files} WHERE lesson_id = ?`, [lessonId]);
+      const unlockRows = await all(
+        `SELECT student_id, level_id, requested_at, granted_at FROM ${T().unlocks} WHERE lesson_id = ?`,
+        [lessonId],
+      );
 
       const students = new Set<string>();
       const completed = new Map<string, Set<string>>();
       const released = new Map<string, Set<string>>();
+      const granted = new Map<string, Set<string>>();
+      const requested = new Map<string, Set<string>>();
       const attemptCounts = new Map<string, Record<string, number>>();
       const lastAt = new Map<string, number>();
+
+      for (const r of unlockRows) {
+        const sid = String(r.student_id);
+        students.add(sid);
+        if (r.requested_at != null) {
+          if (!requested.has(sid)) requested.set(sid, new Set());
+          requested.get(sid)!.add(String(r.level_id));
+        }
+        if (r.granted_at != null) {
+          if (!granted.has(sid)) granted.set(sid, new Set());
+          granted.get(sid)!.add(String(r.level_id));
+        }
+      }
 
       for (const r of progressRows) {
         const sid = String(r.student_id);
@@ -530,6 +643,11 @@ function registerRoutes(ctx: PluginContext): void {
         attemptCounts.get(sid)![String(r.level_id)] = Number(r.c ?? 0);
       }
       for (const r of lastRows) lastAt.set(String(r.student_id), Number(r.t ?? 0));
+      for (const r of unlockRows) {
+        const sid = String(r.student_id);
+        const t = Number(r.requested_at ?? 0);
+        if (t > (lastAt.get(sid) ?? 0)) lastAt.set(sid, t);
+      }
       for (const r of fileRows) students.add(String(r.student_id));
 
       const levelCompletion = new Map<string, number>();
@@ -539,15 +657,22 @@ function registerRoutes(ctx: PluginContext): void {
 
       const list = Array.from(students).map((sid) => {
         const done = completed.get(sid) ?? new Set<string>();
-        const current = levels.find((l) => !done.has(l.id)) ?? null;
+        const access = accessState(levels, done, granted.get(sid) ?? new Set<string>());
         return {
           id: sid,
           completed: Array.from(done),
           released: Array.from(released.get(sid) ?? []),
           completedCount: done.size,
-          currentLevelId: current?.id ?? null,
-          currentLevelTitle: current?.title ?? null,
-          currentLevelType: current?.type ?? null,
+          currentLevelId: access.current?.id ?? null,
+          currentLevelTitle: access.current?.title ?? null,
+          currentLevelType: access.current?.type ?? null,
+          // 等待教师放行：看板据此显示「待放行」并提供解锁按钮
+          awaitingRelease: !!access.blocked,
+          blockedLevelId: access.blocked?.id ?? null,
+          blockedLevelTitle: access.blocked?.title ?? null,
+          releaseRequested: access.blocked
+            ? (requested.get(sid) ?? new Set<string>()).has(access.blocked.id)
+            : false,
           attemptCounts: attemptCounts.get(sid) ?? {},
           lastActivityAt: lastAt.get(sid) ?? null,
         };
@@ -612,6 +737,50 @@ function registerRoutes(ctx: PluginContext): void {
     }),
   );
 
+  // 学生：当前关卡需要教师放行时，主动提醒老师（幂等）
+  ctx.http.post(
+    '/request-unlock',
+    api(async (req) => {
+      const sid = requireStudentId(req);
+      const b = body(req);
+      const lessonId = requireLesson(b.lessonId);
+      const cfg = await getConfig(lessonId);
+      if (!cfg || cfg.status !== 'active') throw new HttpError(409, '闯关尚未开始或已结束');
+      const levels = await loadLevels(lessonId);
+      const done = await completedSet(lessonId, sid);
+      const granted = await grantedSet(lessonId, sid);
+      const access = accessState(levels, done, granted);
+      if (!access.blocked) throw new HttpError(409, '当前关卡不需要老师放行');
+      const asked = str(b.levelId).trim();
+      if (asked && asked !== access.blocked.id) throw new HttpError(409, '只能申请当前关卡的放行');
+      await requestTeacherUnlock(lessonId, sid, access.blocked.id);
+      return { success: true, requested: true, levelId: access.blocked.id };
+    }),
+  );
+
+  // 教师：解锁「需教师放行」的当前关卡（只解锁，不代过）
+  ctx.http.post(
+    '/unlock',
+    api(async (req) => {
+      requireStaff(req);
+      const b = body(req);
+      const lessonId = requireLesson(b.lessonId);
+      const studentId = requireStudentIdValue(b.studentId);
+      const levels = await loadLevels(lessonId);
+      if (levels.length === 0) throw new HttpError(409, '本课堂尚未配置关卡');
+      const done = await completedSet(lessonId, studentId);
+      const current = levels.find((l) => !done.has(l.id)) ?? null;
+      if (!current) throw new HttpError(409, '该学生已完成全部关卡');
+      const asked = str(b.levelId).trim();
+      if (asked && asked !== current.id) throw new HttpError(409, '该学生当前不在这一关');
+      const cfg = safeParse(current.config) ?? {};
+      if (normalizeUnlock(cfg.unlock) !== 'teacher') throw new HttpError(409, '该关卡不需要教师放行');
+      await grantTeacherUnlock(lessonId, studentId, current.id);
+      await recordAttempt(lessonId, studentId, current.id, 'unlock', '', null, null);
+      return { success: true, levelId: current.id, granted: true };
+    }),
+  );
+
   // 教师：放行当前关卡
   ctx.http.post(
     '/release',
@@ -625,6 +794,11 @@ function registerRoutes(ctx: PluginContext): void {
       const current = levels.find((l) => !done.has(l.id)) ?? null;
       if (!current) throw new HttpError(409, '该学生已完成全部关卡');
       await markCompleted(lessonId, studentId, current.id, 1);
+      await run(`DELETE FROM ${T().unlocks} WHERE lesson_id = ? AND student_id = ? AND level_id = ?`, [
+        lessonId,
+        studentId,
+        current.id,
+      ]);
       await recordAttempt(lessonId, studentId, current.id, 'release', '', null, null);
       return { success: true, levelId: current.id, completedCount: done.size + 1 };
     }),
@@ -646,10 +820,16 @@ function registerRoutes(ctx: PluginContext): void {
       let targetId: string | null = null;
       if (scope === 'all') {
         await run(`DELETE FROM ${T().progress} WHERE lesson_id = ? AND student_id = ?`, [lessonId, studentId]);
+        await run(`DELETE FROM ${T().unlocks} WHERE lesson_id = ? AND student_id = ?`, [lessonId, studentId]);
       } else {
         for (const l of levels) if (done.has(l.id)) targetId = l.id;
         if (!targetId) throw new HttpError(409, '未找到可回退的关卡');
         await run(`DELETE FROM ${T().progress} WHERE lesson_id = ? AND student_id = ? AND level_id = ?`, [
+          lessonId,
+          studentId,
+          targetId,
+        ]);
+        await run(`DELETE FROM ${T().unlocks} WHERE lesson_id = ? AND student_id = ? AND level_id = ?`, [
           lessonId,
           studentId,
           targetId,
@@ -686,11 +866,19 @@ function registerRoutes(ctx: PluginContext): void {
         [lessonId, sid],
       );
       const done = new Set(doneRows.map((r) => String(r.level_id)));
-      const current = levels.find((l) => !done.has(l.id)) ?? null;
+      const granted = await grantedSet(lessonId, sid);
+      const access = accessState(levels, done, granted);
+      const current = access.current;
       const last = current
         ? await one(
             `SELECT kind, correct, created_at FROM ${T().attempts} WHERE lesson_id = ? AND student_id = ? AND level_id = ? ORDER BY created_at DESC LIMIT 1`,
             [lessonId, sid, current.id],
+          )
+        : null;
+      const unlockRow = access.blocked
+        ? await one(
+            `SELECT requested_at, granted_at FROM ${T().unlocks} WHERE lesson_id = ? AND student_id = ? AND level_id = ?`,
+            [lessonId, sid, access.blocked.id],
           )
         : null;
 
@@ -701,6 +889,17 @@ function registerRoutes(ctx: PluginContext): void {
         released: doneRows.filter((r) => Number(r.released) === 1).map((r) => String(r.level_id)),
         completedCount: done.size,
         currentLevelId: current?.id ?? null,
+        // 等待教师放行：学生端据此渲染「已提醒老师」卡片，而不是空白。
+        awaitingRelease: !!access.blocked,
+        blockedLevel: access.blocked
+          ? {
+              id: access.blocked.id,
+              seq: access.blocked.seq,
+              title: access.blocked.title,
+              type: access.blocked.type,
+            }
+          : null,
+        releaseRequested: unlockRow?.requested_at != null,
         lastAttempt: last ? { kind: last.kind, correct: last.correct, createdAt: last.created_at } : null,
       };
     }),
@@ -762,7 +961,8 @@ function registerRoutes(ctx: PluginContext): void {
 
       await markCompleted(lessonId, sid, level.id);
       const done = new Set([...c.done, level.id]);
-      return { success: true, correct: true, completed: true, nextLevelId: nextIncompleteId(c.levels, done) };
+      const next = await nextAfterCompletion(lessonId, sid, c.levels, done);
+      return { success: true, correct: true, completed: true, ...next };
     }),
   );
 
@@ -781,7 +981,8 @@ function registerRoutes(ctx: PluginContext): void {
       await recordAttempt(lessonId, sid, c.current.id, 'manual', '', 1, null);
       await markCompleted(lessonId, sid, c.current.id);
       const done = new Set([...c.done, c.current.id]);
-      return { success: true, completed: true, nextLevelId: nextIncompleteId(c.levels, done) };
+      const next = await nextAfterCompletion(lessonId, sid, c.levels, done);
+      return { success: true, completed: true, ...next };
     }),
   );
 
@@ -825,7 +1026,8 @@ function registerRoutes(ctx: PluginContext): void {
       );
       await markCompleted(lessonId, sid, level.id);
       const done = new Set([...c.done, level.id]);
-      return { success: true, completed: true, nextLevelId: nextIncompleteId(c.levels, done) };
+      const next = await nextAfterCompletion(lessonId, sid, c.levels, done);
+      return { success: true, completed: true, ...next };
     }),
   );
 
@@ -949,6 +1151,7 @@ async function activate(ctx: PluginContext): Promise<void> {
       progress: ctx.db.table('progress'),
       attempts: ctx.db.table('attempts'),
       files: ctx.db.table('files'),
+      unlocks: ctx.db.table('unlocks'),
     },
     uploads: new Map(),
   };

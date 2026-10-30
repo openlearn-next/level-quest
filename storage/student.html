@@ -131,6 +131,21 @@
         background: var(--brand);
         color: #fff;
       }
+      .chip.waiting {
+        border-color: var(--warn);
+        color: var(--warn);
+        background: transparent;
+        animation: lvq-pulse 1.6s ease-in-out infinite;
+      }
+      @keyframes lvq-pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.45;
+        }
+      }
       .chip.released {
         outline: 1px dashed var(--ok);
         outline-offset: 1px;
@@ -295,6 +310,7 @@
         var pickedFile = null;
         var busy = false;
         var timer = null;
+        var requestedFor = '';
         var MAX_FILE = 1572864;
         var CHUNK_B64 = 524288;
 
@@ -355,6 +371,9 @@
             state.levelsCount,
             state.completedCount,
             state.currentLevelId,
+            state.awaitingRelease ? 'waiting' : '',
+            state.blockedLevel ? state.blockedLevel.id : '',
+            state.releaseRequested ? 'asked' : '',
             (state.released || []).length,
             state.error || '',
           ].join('|');
@@ -389,7 +408,13 @@
           });
           var chips = state.levels
             .map(function (l) {
-              var cls = done[l.id] ? 'done' : l.id === state.currentLevelId ? 'current' : 'locked';
+              var cls = done[l.id]
+                ? 'done'
+                : state.awaitingRelease && state.blockedLevel && state.blockedLevel.id === l.id
+                  ? 'waiting'
+                  : l.id === state.currentLevelId
+                    ? 'current'
+                    : 'locked';
               if (done[l.id] && rel[l.id]) cls += ' released';
               return '<span class="chip ' + cls + '" title="' + esc(l.title) + '">' + esc(l.seq) + '</span>';
             })
@@ -525,6 +550,28 @@
             '</div>';
 
           if (!state.currentLevelId) {
+            if (state.awaitingRelease) {
+              var blocked = state.blockedLevel || {};
+              return (
+                head +
+                '<div class="card center stack" style="margin-top:12px">' +
+                '<div style="font-size:30px;line-height:1">🔒</div>' +
+                '<div class="kicker">第 ' +
+                esc(blocked.seq || '') +
+                ' 关 · ' +
+                esc(typeLabel(blocked.type)) +
+                '</div>' +
+                '<h1>' +
+                esc(blocked.title || '等待老师放行') +
+                '</h1>' +
+                '<div class="banner warn">' +
+                (state.releaseRequested
+                  ? '已提醒老师，请稍候。老师放行后会自动进入本关，无需刷新。'
+                  : '本关需要老师放行后才能进入，正在通知老师…') +
+                '</div>' +
+                '</div>'
+              );
+            }
             return (
               head +
               '<div class="card center stack" style="margin-top:12px">' +
@@ -549,6 +596,19 @@
             state = await api.get('state?lessonId=' + encodeURIComponent(LESSON));
           } catch (err) {
             if (!state) state = { status: 'error', error: (err && err.message) || '加载失败' };
+          }
+          // 需要教师放行时自动提醒一次（幂等），学生不必再点按钮。
+          if (state && state.status === 'active' && state.awaitingRelease && state.blockedLevel) {
+            var bid = state.blockedLevel.id;
+            if (!state.releaseRequested && requestedFor !== bid) {
+              requestedFor = bid;
+              try {
+                await api.post('request-unlock', { lessonId: LESSON, levelId: bid });
+                state.releaseRequested = true;
+              } catch (e) {
+                requestedFor = '';
+              }
+            }
           }
           render();
         }
@@ -701,6 +761,7 @@
             sig = '';
             feedback = null;
             pickedFile = null;
+            requestedFor = '';
             void fetchState();
           }
         });
