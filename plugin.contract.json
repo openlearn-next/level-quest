@@ -3,6 +3,14 @@
   "uiChannel": "sandbox-view",
   "studentVisible": true,
   "whiteboardWidget": false,
-  "slots": ["teacher.tab", "editor.timeline_segment", "student.lesson.toolbox"],
-  "viewFiles": ["storage/teacher.html", "storage/quest-editor.html", "storage/student.html"]
+  "slots": [
+    "teacher.tab",
+    "editor.timeline_segment",
+    "student.lesson.toolbox"
+  ],
+  "viewFiles": [
+    "storage/teacher.html",
+    "storage/quest-editor.html",
+    "storage/student.html"
+  ]
 }

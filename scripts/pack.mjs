@@ -67,6 +67,8 @@ for (const view of views) {
   if (!files.some((f) => relative(root, f) === rel)) fail(`视图文件未被收纳：${view}`);
 }
 
+const zipName = `${basename(String(manifest.id).replace(/^@/, '').split('/').pop() || 'plugin')}.zip`;
+
 const zip = new JSZip();
 zip.file('index.js', readFileSync(indexJs));
 zip.file('manifest.json', readFileSync(manifestPath));
@@ -75,13 +77,26 @@ for (const file of files) {
   zip.file(relative(root, file).split('\\').join('/'), readFileSync(file));
 }
 
-const zipName = `${basename(String(manifest.id).replace(/^@/, '').split('/').pop() || 'plugin')}.zip`;
 const buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 9 } });
 
+// ── 交付物：只有「完整包」一种 ─────────────────────────────────────────────
+//
+// 官方 CLI 的 build 只打 index.js / manifest.json / frontend.js，**不含 storage/**。
+// 宿主安装时会 stat manifest 里声明的每个 view 文件 —— 缺 storage 就是：
+//   ENOENT: no such file or directory, stat '.../plugins/<id>/storage/teacher.html'
+// 且**整包安装失败**（不是「装了但页面空白」）。
+//
+// 以前仓库里同时躺着两个 ZIP（CLI 的 openlearn-plugin-level-quest.zip 不含 storage、
+// 我们的 level-quest.zip 含），装错哪个取决于手点哪个 —— 这类错不该靠文档提醒。
+// 现在：**覆盖 CLI 同名产物**，让「仓库里/构建产物里的任何一个 ZIP」都是完整包。
+const cliName = 'openlearn-plugin-level-quest.zip';
+writeFileSync(join(distDir, cliName), buffer);
 writeFileSync(join(distDir, zipName), buffer);
 writeFileSync(join(root, zipName), buffer);
+writeFileSync(join(root, cliName), buffer);
 
 const kb = (buffer.length / 1024).toFixed(1);
-console.log(`[pack] ${zipName}（${kb} KB）`);
+console.log(`[pack] ${zipName} / ${cliName}（${kb} KB）`);
 console.log(`[pack] 包含：index.js, manifest.json${existsSync(frontendJs) ? ', frontend.js' : ''}, storage/*（${files.length} 个文件）`);
 console.log(`[pack] 输出：${join(root, zipName)}`);
+console.log('[pack] 两个文件名内容相同，均为完整可安装包（含 storage/）');

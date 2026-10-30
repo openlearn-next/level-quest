@@ -1,16 +1,17 @@
 {
   "name": "openlearn-plugin-level-quest",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "课堂闯关 —— 学生完成当前关卡任务后才能解锁下一关（OpenLearnV2 第三方插件）",
   "author": "OpenLearn Community",
   "scripts": {
-    "build": "openlearn-plugin-sdk build",
+    "prebuild": "node scripts/gen-manifest-export.mjs",
+    "build": "openlearn-plugin-sdk build && node scripts/pack.mjs",
     "dev": "openlearn-plugin-sdk build --watch",
-    "test:contract": "node test-harness/static-check.mjs . && node scripts/check-reserved-routes.mjs .",
+    "test:contract": "node test-harness/static-check.mjs . && node scripts/check-reserved-routes.mjs . && node scripts/check-runtime-bare-imports.mjs . && node scripts/check-package-contents.mjs .",
     "pack": "node scripts/pack.mjs",
-    "release": "npm run build && npm run test:contract && npm run pack"
+    "release": "npm run build && npm run test:contract"
   },
   "dependencies": {
     "@openlearn/plugin-sdk": "^3.7.4"

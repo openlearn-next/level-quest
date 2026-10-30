@@ -509,6 +509,126 @@ if (mode === 'inline' && uiChannel === 'declarative' && usesComponent) {
 }
 
 
+// ── 7a. 中文字号下限（Guardrail 13）────────────────────────────────────
+// 12px 及以下的中文在投影/白板上不可读，但 CSS 不报错、L1 也不会失败，
+// 是「能跑但看不清」的静默问题，只能在静态检查里卡。
+// 覆盖 view 页面（<style> / 行内 style / JS 里 style.fontSize）与 inline React
+// （fontSize 数值或字符串、Tailwind text-xs / text-[12px]）。
+// 纯图标 / 装饰可写同行注释 `font-size-ok` 豁免。
+const MIN_TEXT_PX = 13;
+const FONT_UNIT_PX = { px: 1, rem: 16, em: 16, pt: 4 / 3 };
+const FONT_KEYWORD_PX = { 'xx-small': 9, 'x-small': 10, small: 13 };
+const fontHits = new Set();
+
+const lineIndexOf = (text, idx) => text.slice(0, idx).split('\n').length;
+const lineTextAt = (text, idx) => {
+  const start = text.lastIndexOf('\n', idx - 1) + 1;
+  const end = text.indexOf('\n', idx);
+  return text.slice(start, end === -1 ? text.length : end);
+};
+const isFontExempt = (text, idx) => /font-size-ok/.test(lineTextAt(text, idx));
+
+function reportFont(file, text, idx, raw, px) {
+  const line = lineIndexOf(text, idx);
+  raw = raw.trim().replace(/["']+$/, '');
+  const key = `${file}:${line}:${raw}`;
+  if (fontHits.has(key)) return;
+  fontHits.add(key);
+  add(
+    'error',
+    'FONT_TOO_SMALL',
+    `${file}:${line} 字号 ${raw} ≈ ${Math.round(px * 10) / 10}px < ${MIN_TEXT_PX}px：`
+      + `中文在投影/白板上不可读，正文与标签至少 ${MIN_TEXT_PX}px；`
+      + `纯图标 / 装饰可加同行注释 font-size-ok 豁免`,
+    file,
+  );
+}
+
+function sizeToPx(num, unit) {
+  const n = Number(num);
+  if (!Number.isFinite(n) || n === 0) return null; // 0 常用于藏字/图标，不判
+  const factor = FONT_UNIT_PX[String(unit || '').toLowerCase()];
+  return factor == null ? null : n * factor;
+}
+
+function checkFontDeclarations(file, text, from, to) {
+  const region = text.slice(from, to);
+  for (const m of region.matchAll(/(font-size|font)\s*:\s*([^;}]+)/gi)) {
+    const idx = from + m.index;
+    if (isFontExempt(text, idx)) continue;
+    const value = m[2];
+    if (/calc\(/i.test(value)) continue; // 静态求值不可靠，交给 L1 / 人工
+    const sizes = [];
+    if (m[1].toLowerCase() === 'font-size') {
+      for (const n of value.matchAll(/(\d+(?:\.\d+)?)\s*(px|rem|em|pt)\b/gi)) {
+        const px = sizeToPx(n[1], n[2]);
+        if (px != null) sizes.push(px);
+      }
+      for (const [kw, px] of Object.entries(FONT_KEYWORD_PX)) {
+        if (new RegExp(`\\b${kw}\\b`, 'i').test(value)) sizes.push(px);
+      }
+    } else {
+      // font 简写：size 必须带单位，可跟 /line-height，如 13px/1.6
+      const size = value.match(/(\d+(?:\.\d+)?)\s*(px|rem|em|pt)\b/i);
+      if (size) {
+        const px = sizeToPx(size[1], size[2]);
+        if (px != null) sizes.push(px);
+      } else {
+        for (const [kw, px] of Object.entries(FONT_KEYWORD_PX)) {
+          if (new RegExp(`(?:^|\\s)${kw}\\b`, 'i').test(value)) { sizes.push(px); break; }
+        }
+      }
+    }
+    if (!sizes.length) continue;
+    const min = Math.min(...sizes);
+    if (min < MIN_TEXT_PX) reportFont(file, text, idx, m[0].trim().slice(0, 60), min);
+  }
+}
+
+function checkViewFonts(file, html) {
+  for (const m of html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) {
+    checkFontDeclarations(file, html, m.index, m.index + m[0].length);
+  }
+  for (const m of html.matchAll(/\bstyle\s*=\s*["']([^"']*)["']/gi)) {
+    checkFontDeclarations(file, html, m.index, m.index + m[0].length);
+  }
+  for (const m of html.matchAll(/fontSize\s*[:=]\s*['"]?(\d+(?:\.\d+)?)(px|rem|em|pt)?['"]?/g)) {
+    if (isFontExempt(html, m.index)) continue;
+    const px = sizeToPx(m[1], m[2] || 'px');
+    if (px != null && px < MIN_TEXT_PX) reportFont(file, html, m.index, m[0], px);
+  }
+}
+
+const TAILWIND_TEXT_PX = { xs: 12 };
+
+function checkReactFonts(file, text) {
+  for (const m of text.matchAll(/fontSize\s*:\s*(?:(\d+(?:\.\d+)?)|['"](\d+(?:\.\d+)?)(px|rem|em|pt)?['"])/g)) {
+    if (isFontExempt(text, m.index)) continue;
+    const px = m[1] != null ? sizeToPx(m[1], 'px') : sizeToPx(m[2], m[3] || 'px');
+    if (px != null && px < MIN_TEXT_PX) reportFont(file, text, m.index, m[0], px);
+  }
+  const classPatterns = [
+    /(?:className|class)\s*[:=]\s*(?:\{\s*)?`([^`]*)`/g,
+    /(?:className|class)\s*[:=]\s*(?:\{\s*)?["']([^"']*)["']/g,
+  ];
+  for (const pattern of classPatterns) {
+    for (const m of text.matchAll(pattern)) {
+      if (isFontExempt(text, m.index)) continue;
+      for (const [name, px] of Object.entries(TAILWIND_TEXT_PX)) {
+        if (new RegExp(`\\btext-${name}\\b`).test(m[1])) reportFont(file, text, m.index, `text-${name}`, px);
+      }
+      for (const t of m[1].matchAll(/\btext-\[(\d+(?:\.\d+)?)(px|rem|em|pt)\]/g)) {
+        const px = sizeToPx(t[1], t[2]);
+        if (px != null && px < MIN_TEXT_PX) reportFont(file, text, m.index, t[0], px);
+      }
+    }
+  }
+}
+
+for (const f of srcFiles.filter((p) => /\.(tsx|jsx)$/.test(p))) {
+  checkReactFonts(f, read(f) ?? '');
+}
+
 // ── 7b. 沙箱 HTML 视图（view，v0.7.6 双轨制 UI）─────────────────────────
 // process 插件唯一的自定义 UI 通道：manifest 条目写 view: 'storage/x.html'，宿主用不透明源 iframe 渲染。
 const viewPaths = new Set([
@@ -562,6 +682,7 @@ for (const v of viewPaths) {
   if (/\bapi\.(?:get|post|del)\s*\([\s\S]{0,160}?\.result\b/.test(html)) {
     add('warn', 'VIEW_API_RESULT_UNWRAP', `${v} 对 api.* 的返回值取了 .result：bridge.api 返回的是网关裸响应体（不拆信封）；只有 invokeCommand 才返回已拆层的 result`, file);
   }
+  checkViewFonts(file, html);
 }
 if (viewPaths.size > 0) {
   const pkg = (() => { try { return JSON.parse(read(join(ROOT, 'package.json')) ?? '{}'); } catch { return {}; } })();

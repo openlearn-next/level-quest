@@ -9,7 +9,14 @@
  */
 
 import type { PluginApiRequest, PluginContext } from '@openlearn/plugin-sdk';
-import { IDatabaseToken } from '@openlearn/plugin-sdk';
+// 运行期**不能**从 '@openlearn/plugin-sdk' 做值导入：产物会残留裸说明符，
+// 子进程权限模型与热重载的 data: URL 都解析不了 → 插件装上后「启用」直接 500。
+// 详见 src/sdk-tokens.ts 的说明。
+import { IDatabaseToken } from './sdk-tokens';
+// 平台更新/热重载链路要求产物**导出 manifest**（PluginHost.reloadPlugin →
+// extractManifest 从源码里取清单），否则更新接口 500。
+// 本文件由 scripts/gen-manifest-export.mjs 从 manifest.json 生成，勿手改。
+export { manifest } from './manifest.generated';
 
 const PLUGIN_ID = '@openlearn-community/level-quest';
 const MAX_LEVELS = 50;

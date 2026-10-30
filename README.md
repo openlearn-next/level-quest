@@ -56,24 +56,38 @@ level-quest/
 │   ├── teacher.html       # 教师页签视图（完整关卡设计 + 实时看板）
 │   ├── quest-editor.html  # 课程编辑器内嵌面板（关卡与解锁条件）
 │   └── student.html       # 学生端随堂面板视图
-└── scripts/pack.mjs       # 打包：在 CLI 产物上补进 storage/
+└── scripts/
+    ├── pack.mjs                   # 打包：把 storage/* 补进 ZIP（唯一交付物）
+    ├── gen-manifest-export.mjs    # 从 manifest.json 生成产物里的 manifest 导出
+    ├── check-runtime-bare-imports.mjs  # 产物不得残留 SDK 裸说明符
+    └── check-package-contents.mjs      # 交付 ZIP 必须含 manifest 声明的视图
 ```
 
 ## 构建与安装
 
 ```bash
 npm install
-npm run build           # openlearn-plugin-sdk build -> dist/ 与官方 ZIP
-npm run test:contract   # L0 契约静态检查（<1s，零依赖；优先扫描 dist/index.js）
-npm run pack            # 追加 storage/*，产出 level-quest.zip
-npm run release         # 以上三步一次跑完（发布请统一走这条）
+npm run build           # SDK 构建 + 打包 → 完整可安装 ZIP（含 storage/）
+npm run test:contract   # L0 契约静态检查（<1s，零依赖）
+npm run release         # 以上两步一次跑完（发布请统一走这条）
 ```
 
 > L0 在 `dist/index.js` 存在时会检查构建产物而不是 `src/`，所以顺序必须是
 > **先 build 再 test:contract**；否则会拿旧产物误报/漏报。
 
-上传**根目录的 `level-quest.zip`**（不是 SDK 直接产出的那个 ZIP：它只含
-`index.js / manifest.json / frontend.js`，缺少 `storage/`，装上后教师页与学生面板都会空白）。
+**交付物只有一个**：根目录的 `level-quest.zip` 与 `openlearn-plugin-level-quest.zip`
+内容完全相同，都是含 `storage/` 的完整包（`npm run build` 已内置打包）。
+
+> ⚠️ 官方 SDK 的 `openlearn-plugin-sdk build` 产出的 ZIP **不含 `storage/`**。
+> 宿主安装时会 stat manifest 里声明的每个 view 文件，缺 `storage/` 的症状是
+> **整包安装失败**：
+>
+> ```
+> ENOENT: no such file or directory, stat '.../plugins/<id>/storage/teacher.html'
+> ```
+>
+> 因此仓库里两个 ZIP 文件名都被覆盖为完整包，`scripts/check-package-contents.mjs`
+> 会在发布前逐个校验。
 
 安装后在「插件中心」激活。推荐流程（课程编辑器）：
 
@@ -98,7 +112,9 @@ npm run test:contract
 `api.routes ↔ ctx.http` 双向配对 · 槽位真伪 · `view` 文件存在与桥接引用 · 裸导入 ·
 process 模式禁用 API · DB 表名/分号 · 密钥泄漏；另外由
 `scripts/check-reserved-routes.mjs` 检查**平台保留路由**（`config / toggle /
-contributions / check-update / network-grants / sandbox-command …`）。
+contributions / check-update / network-grants / sandbox-command …`）、
+由 `scripts/check-runtime-bare-imports.mjs` 检查**运行期裸说明符**、
+由 `scripts/check-package-contents.mjs` 检查**交付包内容**。
 
 - 平台保留动作不能拿来当插件自己的 API 路径：网关会放行，但核心路由先匹配。
   例如插件写 `GET /config` 会被平台的插件配置接口截走 —— 登录态失效时页面直接
@@ -110,6 +126,24 @@ contributions / check-update / network-grants / sandbox-command …`）。
   实际模式由服务端按白名单计算；保留该字段只为让安装记录不显示「被强制改写」。
 - 平台升级后槽位有变化时，从插件开发 skill 重抄 `test-harness/slot-registry.json`
   （`platformVersion` 字段可核对）。
+
+### 三道「装得上 / 启得了 / 更得了」的坑（都已在插件侧解决）
+
+平台对第三方 **process** 插件有三条会直接变成 500 的硬约束。前两条已在插件侧
+规避，第三条是平台缺陷、需人工一步恢复。
+
+| 症状 | 根因 | 插件侧做法 |
+| --- | --- | --- |
+| 安装报 `ENOENT … storage/teacher.html` | SDK 的 `build` 产出的 ZIP **不含 `storage/`**，宿主安装时会 stat 每个 view 文件 | `npm run build` 内置打包，两个 ZIP 文件名都产出**含 storage 的完整包**；`check-package-contents.mjs` 发布前逐个校验 |
+| 「启用」报 500（`ERR_ACCESS_DENIED` / `uuid/package.json`） | 产物里 `import '@openlearn/plugin-sdk'` 是裸说明符；子进程用 Node 权限模型，白名单只放行 SDK 目录**本身**，SDK 内部的 `uuid` 依赖落在宿主 node_modules 下 → 拒绝读取 | 运行期**不做 SDK 值导入**：Token 在 `src/sdk-tokens.ts` 本地同名同版本重建；`check-runtime-bare-imports.mjs` 拦截回归 |
+| 「更新」报 500（`Plugin source code has no manifest export`） | 平台的更新链路（`PluginHost.reloadPlugin → extractManifest`）从**源码**里取清单，而 SDK 只把 manifest.json 单独打进 ZIP | `scripts/gen-manifest-export.mjs` 在构建时把 manifest.json 注入产物（`src/manifest.generated.ts`），更新即可 200 |
+
+> **更新后的一步恢复（平台缺陷，非插件问题）**：平台热重载 process 插件后，
+> HTTP 派发仍指向被终止的旧子进程 → 插件接口 504
+> （`ERR_IPC_CHANNEL_CLOSED`）。表现为「更新成功但插件接口超时」。
+> 恢复方式：**在插件中心把插件禁用再启用一次**（或重启平台）。
+> 该问题对所有带 HTTP 路由的 process 插件一致，与本插件无关。
+
 
 ## 数据与安全
 
